@@ -97,6 +97,10 @@ public:
     // Debug utility function
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void DebugPrintInfo();
+    
+    // Set material for the piece
+    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    void SetPieceMaterial(UMaterialInterface* NewMaterial);
 
 protected:
     // Overlap event'leri

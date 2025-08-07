@@ -33,9 +33,11 @@ class PUZZLEGAME_API APuzzleGameMode : public AGameModeBase
 
 public:
     APuzzleGameMode();
+    virtual ~APuzzleGameMode();
 
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     // Oyun istatistikleri
     UPROPERTY(BlueprintReadOnly, Category = "Game Stats")
@@ -63,9 +65,17 @@ protected:
     // Puzzle parçaları
     UPROPERTY(BlueprintReadOnly, Category = "Puzzle")
     TArray<APuzzlePiece*> PuzzlePieces;
+    
+    // Available piece IDs for UI (shuffled)
+    UPROPERTY(BlueprintReadOnly, Category = "Puzzle")
+    TArray<int32> AvailablePieceIDs;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Puzzle")
     TSubclassOf<APuzzlePiece> PuzzlePieceClass;
+    
+    // Piece materials array - set in Blueprint
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Puzzle")
+    TArray<UMaterialInterface*> PieceMaterials;
 
     // Timer handle
     FTimerHandle GameTimerHandle;
@@ -152,6 +162,9 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Puzzle")
     float GetCompletionPercentage() const;
+    
+    UFUNCTION(BlueprintPure, Category = "Puzzle")
+    const TArray<UMaterialInterface*>& GetPieceMaterials() const { return PieceMaterials; }
 
     // Grid visualization functions - NEW
     UFUNCTION(BlueprintCallable, Category = "Grid")
@@ -184,14 +197,41 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Boundary")
     bool IsBoundaryConstraintEnabled() const { return bEnableBoundaryConstraint; }
+    
+    float GetPieceSpacing() const { return PieceSpacing; }
 
     // Grid snapping function
     UFUNCTION(BlueprintCallable, Category = "Grid")
     FVector GetNearestGridPosition(const FVector& WorldPosition);
     
+    // Grid ID based functions
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    int32 GetGridIDFromPosition(const FVector& WorldPosition);
+    
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    FVector GetGridPositionFromID(int32 GridID);
+    
     // Find piece at grid position
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     APuzzlePiece* GetPieceAtGridPosition(const FVector& GridPosition);
+    
+    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    APuzzlePiece* GetPieceAtGridID(int32 GridID);
+    
+    // Grid occupation management
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void UpdateGridOccupancy(int32 GridID, APuzzlePiece* Piece);
+    
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void SwapPiecesAtGridIDs(int32 GridID1, int32 GridID2);
+    
+    // Get available pieces for UI
+    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    TArray<int32> GetAvailablePieceIDs() const { return AvailablePieceIDs; }
+    
+    // Remove piece from available list when spawned
+    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    void RemovePieceFromAvailable(int32 PieceID);
 
     // Debug functions - NEW
     UFUNCTION(BlueprintCallable, Category = "Debug")
@@ -202,6 +242,12 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void PrintAllPiecePositions();
+    
+    UFUNCTION(BlueprintCallable, Category = "Debug", Exec)
+    void ForceCheckGameCompletion();
+    
+    UFUNCTION(BlueprintCallable, Category = "Debug", Exec)
+    void DebugPuzzleState();
 
 protected:
     // Internal fonksiyonlar
@@ -230,4 +276,9 @@ private:
     // Performance optimization - NEW
     UPROPERTY()
     TArray<UMaterialInstanceDynamic*> GridMarkerMaterials;
+    
+    // Grid occupation tracking - NEW
+    // Using array instead of TMap to avoid pointer issues
+    UPROPERTY()
+    TArray<int32> GridOccupancy; // GridID -> PieceID mapping (-1 means empty)
 };

@@ -164,6 +164,14 @@ protected:
     void HandlePieceSelection();
     void HandleDragUpdate();
     APuzzleGameMode* GetPuzzleGameMode();
+    
+public:
+    // Debug commands
+    UFUNCTION(Exec)
+    void DebugPuzzle();
+    
+    UFUNCTION(Exec)
+    void CheckPuzzleComplete();
 
 private:
     // Drag state variables

@@ -29,11 +29,11 @@ APuzzlePlayerController::APuzzlePlayerController()
 
     // Drag settings
     DragHeight = 50.0f;
-    DragSmoothness = 10.0f;
+    DragSmoothness = 20.0f; // Increased for more responsive dragging
 
     // Trace settings
     TraceDistance = 10000.0f;
-    TraceChannel = ECC_WorldStatic;
+    TraceChannel = ECC_Visibility; // Changed from WorldStatic to Visibility for better detection
 
     // Internal state
     bIsDragging = false;
@@ -63,10 +63,18 @@ void APuzzlePlayerController::BeginPlay()
     // Cache game mode reference
     CachedGameMode = GetPuzzleGameMode();
 
+    // Debug log to verify this is the correct controller
+    UE_LOG(LogTemp, Warning, TEXT("APuzzlePlayerController::BeginPlay - Controller Class: %s"), *GetClass()->GetName());
+    
     // Show main widget if available
     if (MainWidgetClass)
     {
+        UE_LOG(LogTemp, Warning, TEXT("MainWidgetClass is set, calling ShowMainWidget"));
         ShowMainWidget();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("MainWidgetClass is NULL! Set it in BP_PuzzlePlayerController"));
     }
 
     if (GEngine)
@@ -120,6 +128,8 @@ void APuzzlePlayerController::Tick(float DeltaTime)
 void APuzzlePlayerController::OnLeftClickPressed(const FInputActionValue& Value)
 {
     bMousePressed = true;
+    
+    UE_LOG(LogTemp, Warning, TEXT("Left click pressed. Current state: %d"), (int32)CurrentInteractionState);
 
     if (CurrentInteractionState == EMouseInteractionState::None)
     {
@@ -128,8 +138,13 @@ void APuzzlePlayerController::OnLeftClickPressed(const FInputActionValue& Value)
 
         if (ClickedPiece)
         {
+            UE_LOG(LogTemp, Warning, TEXT("Clicked on piece %d"), ClickedPiece->GetPieceID());
             // Start dragging the piece
             StartDragPiece(ClickedPiece);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No piece under mouse"));
         }
     }
 }
@@ -160,21 +175,36 @@ void APuzzlePlayerController::OnToggleUI(const FInputActionValue& Value)
 
 void APuzzlePlayerController::StartDragFromUI(int32 PieceID)
 {
+    UE_LOG(LogTemp, Warning, TEXT("StartDragFromUI called with PieceID: %d"), PieceID);
+    
     if (CurrentInteractionState != EMouseInteractionState::None)
     {
+        UE_LOG(LogTemp, Warning, TEXT("Already in interaction state: %d"), (int32)CurrentInteractionState);
         return; // Already in an interaction
     }
 
     // Get world location under mouse
     FVector PieceSpawnLocation = GetMouseWorldLocation();
-    PieceSpawnLocation.Z += DragHeight; // Spawn above ground level
+    PieceSpawnLocation.Z = 0.0f; // Keep at ground level
+    
+    UE_LOG(LogTemp, Warning, TEXT("Spawn location: %s"), *PieceSpawnLocation.ToString());
 
     // Spawn new puzzle piece at mouse location
     if (CachedGameMode)
     {
+        UE_LOG(LogTemp, Warning, TEXT("CachedGameMode exists, calling SpawnPuzzlePiece"));
+        
         APuzzlePiece* NewPiece = CachedGameMode->SpawnPuzzlePiece(PieceID, PieceSpawnLocation);
         if (NewPiece)
         {
+            UE_LOG(LogTemp, Warning, TEXT("Piece spawned successfully"));
+            
+            // Set state to DraggingFromUI before starting drag
+            CurrentInteractionState = EMouseInteractionState::DraggingFromUI;
+            
+            // Set drag offset to zero for UI spawned pieces
+            DragOffset = FVector::ZeroVector;
+            
             StartDragPiece(NewPiece);
 
             if (GEngine)
@@ -183,18 +213,37 @@ void APuzzlePlayerController::StartDragFromUI(int32 PieceID)
                     FString::Printf(TEXT("Spawned piece %d from UI"), PieceID));
             }
         }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("SpawnPuzzlePiece returned null for PieceID %d!"), PieceID);
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red,
+                    FString::Printf(TEXT("Failed to spawn piece %d - may already exist"), PieceID));
+            }
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("CachedGameMode is null!"));
     }
 }
 
 void APuzzlePlayerController::StartDragPiece(APuzzlePiece* Piece)
 {
-    if (!Piece || CurrentInteractionState != EMouseInteractionState::None)
+    if (!Piece)
     {
+        UE_LOG(LogTemp, Warning, TEXT("StartDragPiece: Piece is null"));
+        return;
+    }
+    
+    if (CurrentInteractionState != EMouseInteractionState::None && CurrentInteractionState != EMouseInteractionState::DraggingFromUI)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("StartDragPiece: Already in state %d"), (int32)CurrentInteractionState);
         return;
     }
 
     SelectedPiece = Piece;
-    CurrentInteractionState = EMouseInteractionState::DraggingPiece;
     bIsDragging = true;
 
     // Set piece as selected
@@ -202,12 +251,29 @@ void APuzzlePlayerController::StartDragPiece(APuzzlePiece* Piece)
 
     // Calculate drag offset
     DragStartLocation = SelectedPiece->GetActorLocation();
-    FVector MouseWorld = GetMouseWorldLocation();
-    DragOffset = DragStartLocation - MouseWorld;
+    
+    // For UI spawned pieces, always use zero offset
+    if (CurrentInteractionState == EMouseInteractionState::DraggingFromUI)
+    {
+        DragOffset = FVector::ZeroVector;
+        CurrentInteractionState = EMouseInteractionState::DraggingPiece; // Change to regular dragging
+    }
+    else
+    {
+        // For pieces already in scene, calculate proper offset
+        FVector MouseWorld = GetMouseWorldLocation();
+        DragOffset = DragStartLocation - MouseWorld;
+        CurrentInteractionState = EMouseInteractionState::DraggingPiece;
+    }
 
     // Fire events
     OnPieceSelected(SelectedPiece);
     OnDragStarted(SelectedPiece);
+    
+    // Switch to game-only input mode during drag for free mouse movement
+    FInputModeGameOnly GameOnlyMode;
+    SetInputMode(GameOnlyMode);
+    bShowMouseCursor = true; // Keep cursor visible
 
     if (GEngine)
     {
@@ -226,67 +292,39 @@ void APuzzlePlayerController::EndDrag()
     // Get the drop location
     FVector DropLocation = GetMouseWorldLocation();
     
-    // Find if we're dropping near another piece
+    // Check what's under the mouse using trace
+    FHitResult HitResult;
     APuzzlePiece* TargetPiece = nullptr;
-    float MinDistance = 1000.0f; // Detection radius
     
-    if (CachedGameMode)
+    if (TraceUnderMouse(HitResult))
     {
-        TArray<APuzzlePiece*> AllPieces = CachedGameMode->GetPuzzlePieces();
-        FVector MyLocation = SelectedPiece->GetActorLocation();
-        
-        // Set selected piece location to drop location temporarily to check distances
-        MyLocation.X = DropLocation.X;
-        MyLocation.Y = DropLocation.Y;
-        MyLocation.Z = 0.0f;
-        
-        for (APuzzlePiece* Piece : AllPieces)
-        {
-            if (Piece && Piece != SelectedPiece)
-            {
-                FVector PieceLocation = Piece->GetActorLocation();
-                float Distance = FVector::Dist2D(MyLocation, PieceLocation);
-                
-                if (Distance < MinDistance)
-                {
-                    MinDistance = Distance;
-                    TargetPiece = Piece;
-                }
-            }
-        }
+        TargetPiece = Cast<APuzzlePiece>(HitResult.GetActor());
     }
     
-    if (TargetPiece)
+    if (TargetPiece && TargetPiece != SelectedPiece)
     {
-        // Swap pieces
-        UE_LOG(LogTemp, Warning, TEXT("Swapping pieces: %d with %d"), 
-            SelectedPiece->GetPieceID(), TargetPiece->GetPieceID());
-        
-        FVector MyCurrentLocation = SelectedPiece->GetActorLocation();
-        FVector TargetCurrentLocation = TargetPiece->GetActorLocation();
+        // Swap pieces using the new grid occupancy system
+        UE_LOG(LogTemp, Warning, TEXT("Swapping pieces: %d with %d"), SelectedPiece->GetPieceID(), TargetPiece->GetPieceID());
         
         if (CachedGameMode)
         {
-            // Snap both positions to grid
-            FVector MySnapLocation = CachedGameMode->GetNearestGridPosition(TargetCurrentLocation);
-            FVector TargetSnapLocation = CachedGameMode->GetNearestGridPosition(MyCurrentLocation);
+            // Get current grid positions of both pieces
+            int32 SelectedGridID = CachedGameMode->GetGridIDFromPosition(SelectedPiece->GetActorLocation());
+            int32 TargetGridID = CachedGameMode->GetGridIDFromPosition(TargetPiece->GetActorLocation());
             
-            // Swap to snapped positions
-            SelectedPiece->MovePieceToLocation(MySnapLocation, true);
-            TargetPiece->MovePieceToLocation(TargetSnapLocation, true);
-        }
-        else
-        {
-            // Fallback: direct swap
-            SelectedPiece->MovePieceToLocation(TargetCurrentLocation, true);
-            TargetPiece->MovePieceToLocation(MyCurrentLocation, true);
+            if (SelectedGridID >= 0 && TargetGridID >= 0)
+            {
+                // Use the GameMode's swap function
+                CachedGameMode->SwapPiecesAtGridIDs(SelectedGridID, TargetGridID);
+                
+                // Increment move count
+                CachedGameMode->IncrementMoveCount();
+            }
         }
 
         if (GEngine)
         {
-            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, 
-                FString::Printf(TEXT("Swapped pieces: %d <-> %d"), 
-                    SelectedPiece->GetPieceID(), TargetPiece->GetPieceID()));
+            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, TEXT("Swapped pieces!"));
         }
     }
     else
@@ -294,36 +332,42 @@ void APuzzlePlayerController::EndDrag()
         // Drop at current location with grid snapping
         if (CachedGameMode)
         {
-            // Find the nearest grid position
-            FVector SnappedLocation = CachedGameMode->GetNearestGridPosition(DropLocation);
+            // Get the starting grid ID
+            int32 StartGridID = CachedGameMode->GetGridIDFromPosition(DragStartLocation);
             
-            // Check if there's already a piece at this grid position
-            APuzzlePiece* OccupyingPiece = CachedGameMode->GetPieceAtGridPosition(SnappedLocation);
+            // Get the target grid ID for the drop location
+            FVector CurrentPieceLocation = SelectedPiece->GetActorLocation();
+            int32 TargetGridID = CachedGameMode->GetGridIDFromPosition(CurrentPieceLocation);
             
-            if (OccupyingPiece && OccupyingPiece != SelectedPiece)
+            if (TargetGridID >= 0 && TargetGridID != StartGridID)
             {
-                // Swap with the piece occupying this grid position
-                FVector MyOriginalLocation = SelectedPiece->GetActorLocation();
-                FVector MySnapLocation = CachedGameMode->GetNearestGridPosition(MyOriginalLocation);
+                // Check if target position is occupied
+                APuzzlePiece* OccupyingPiece = CachedGameMode->GetPieceAtGridID(TargetGridID);
                 
-                SelectedPiece->MovePieceToLocation(SnappedLocation, true);
-                OccupyingPiece->MovePieceToLocation(MySnapLocation, true);
-                
-                if (GEngine)
+                if (OccupyingPiece)
                 {
-                    GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan,
-                        FString::Printf(TEXT("Swapped with piece at grid position!")));
+                    // Target is occupied - swap with it
+                    CachedGameMode->SwapPiecesAtGridIDs(StartGridID, TargetGridID);
                 }
+                else
+                {
+                    // Target is empty - just move there
+                    FVector GridPosition = CachedGameMode->GetGridPositionFromID(TargetGridID);
+                    SelectedPiece->MovePieceToLocation(GridPosition, false);
+                    
+                    // Update grid occupancy
+                    CachedGameMode->UpdateGridOccupancy(TargetGridID, SelectedPiece);
+                }
+                
+                // Increment move count since we moved
+                CachedGameMode->IncrementMoveCount();
             }
-            else
+            else if (TargetGridID == StartGridID)
             {
-                // No piece at this position, just move there
-                SelectedPiece->MovePieceToLocation(SnappedLocation, true);
+                // Dropped at same position - just snap back
+                FVector GridPosition = CachedGameMode->GetGridPositionFromID(TargetGridID);
+                SelectedPiece->MovePieceToLocation(GridPosition, false);
             }
-        }
-        else
-        {
-            SelectedPiece->MovePieceToLocation(DropLocation, true);
         }
     }
 
@@ -335,10 +379,23 @@ void APuzzlePlayerController::EndDrag()
     SelectedPiece = nullptr;
     CurrentInteractionState = EMouseInteractionState::None;
     bIsDragging = false;
+    DragOffset = FVector::ZeroVector; // Reset drag offset
+    
+    // Restore input mode to game and UI
+    if (MainWidget && MainWidget->IsInViewport())
+    {
+        FInputModeGameAndUI InputMode;
+        InputMode.SetWidgetToFocus(nullptr);
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        InputMode.SetHideCursorDuringCapture(false);
+        SetInputMode(InputMode);
+    }
 
+    UE_LOG(LogTemp, Warning, TEXT("Drag ended. State reset to None"));
+    
     if (GEngine)
     {
-        GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Orange, TEXT("Drag ended"));
+        GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Orange, TEXT("Drag ended - State reset"));
     }
 }
 
@@ -349,21 +406,23 @@ void APuzzlePlayerController::UpdateDragPosition()
         return;
     }
 
-    // Get target position (mouse world location + offset)
-    FVector TargetLocation = GetMouseWorldLocation() + DragOffset;
-    TargetLocation.Z = DragStartLocation.Z + DragHeight; // Keep at drag height
+    // Get target position 
+    FVector MouseLocation = GetMouseWorldLocation();
+    FVector TargetLocation = MouseLocation + DragOffset;
+    TargetLocation.Z = DragHeight; // Keep at drag height
 
-    // Smoothly interpolate to target position
-    FVector CurrentLocation = SelectedPiece->GetActorLocation();
-    FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetLocation, GetWorld()->GetDeltaSeconds(), DragSmoothness);
-
-    SelectedPiece->SetActorLocation(NewLocation);
+    // Direct set location during drag - no interpolation for immediate response
+    SelectedPiece->SetActorLocation(TargetLocation);
     
     // Draw snap preview
     if (CachedGameMode)
     {
-        FVector SnapPosition = CachedGameMode->GetNearestGridPosition(TargetLocation);
-        DrawDebugBox(GetWorld(), SnapPosition + FVector(0, 0, 5), FVector(40, 40, 2), FColor::Green, false, 0.1f, 0, 3.0f);
+        int32 GridID = CachedGameMode->GetGridIDFromPosition(TargetLocation);
+        if (GridID >= 0)
+        {
+            FVector SnapPosition = CachedGameMode->GetGridPositionFromID(GridID);
+            DrawDebugBox(GetWorld(), SnapPosition + FVector(0, 0, 5), FVector(40, 40, 2), FColor::Green, false, 0.1f, 0, 3.0f);
+        }
     }
 }
 
@@ -399,25 +458,44 @@ bool APuzzlePlayerController::TraceUnderMouse(FHitResult& HitResult)
         QueryParams
     );
 
+    // Debug draw the trace line
+#if WITH_EDITOR
+    if (bHit)
+    {
+        DrawDebugLine(GetWorld(), Start, HitResult.Location, FColor::Green, false, 0.1f, 0, 1.0f);
+        DrawDebugSphere(GetWorld(), HitResult.Location, 5.0f, 8, FColor::Red, false, 0.1f);
+    }
+    else
+    {
+        DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, 0.1f, 0, 1.0f);
+    }
+#endif
 
     return bHit;
 }
 
 FVector APuzzlePlayerController::GetMouseWorldLocation()
 {
-    FHitResult HitResult;
-    if (TraceUnderMouse(HitResult))
-    {
-        return HitResult.Location;
-    }
-
-    // Fallback: project to a plane at Z=0
+    // Always project to a plane at Z=0 for consistent behavior
     FVector WorldLocation, WorldDirection;
     if (DeprojectMousePositionToWorld(WorldLocation, WorldDirection))
     {
         // Find intersection with Z=0 plane
-        float t = -WorldLocation.Z / WorldDirection.Z;
-        return WorldLocation + (WorldDirection * t);
+        if (FMath::Abs(WorldDirection.Z) > 0.0001f) // Avoid division by zero
+        {
+            float t = -WorldLocation.Z / WorldDirection.Z;
+            FVector PlaneLocation = WorldLocation + (WorldDirection * t);
+            return PlaneLocation;
+        }
+    }
+
+    // Fallback: try trace
+    FHitResult HitResult;
+    if (TraceUnderMouse(HitResult))
+    {
+        FVector TraceLocation = HitResult.Location;
+        TraceLocation.Z = 0.0f;
+        return TraceLocation;
     }
 
     return FVector::ZeroVector;
@@ -428,7 +506,16 @@ APuzzlePiece* APuzzlePlayerController::GetPuzzlePieceUnderMouse()
     FHitResult HitResult;
     if (TraceUnderMouse(HitResult))
     {
-        return Cast<APuzzlePiece>(HitResult.GetActor());
+        AActor* HitActor = HitResult.GetActor();
+        if (HitActor)
+        {
+            UE_LOG(LogTemp, Verbose, TEXT("Hit actor: %s"), *HitActor->GetClass()->GetName());
+            APuzzlePiece* Piece = Cast<APuzzlePiece>(HitActor);
+            if (Piece)
+            {
+                return Piece;
+            }
+        }
     }
 
     return nullptr;
@@ -439,11 +526,23 @@ void APuzzlePlayerController::ShowMainWidget()
     if (MainWidgetClass && !MainWidget)
     {
         MainWidget = CreateWidget<UUserWidget>(this, MainWidgetClass);
+        
+        if (MainWidget)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Created MainWidget with owner: %s"), *GetClass()->GetName());
+        }
     }
 
     if (MainWidget)
     {
         MainWidget->AddToViewport();
+        
+        // Set input mode to allow both game and UI
+        FInputModeGameAndUI InputMode;
+        InputMode.SetWidgetToFocus(nullptr); // Don't focus on widget
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        InputMode.SetHideCursorDuringCapture(false);
+        SetInputMode(InputMode);
     }
 }
 
@@ -502,6 +601,10 @@ void APuzzlePlayerController::HandleDragUpdate()
     {
         UpdateDragPosition();
     }
+    else if (bIsDragging)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("HandleDragUpdate: bIsDragging is true but state is %d"), (int32)CurrentInteractionState);
+    }
 }
 
 APuzzleGameMode* APuzzlePlayerController::GetPuzzleGameMode()
@@ -512,4 +615,30 @@ APuzzleGameMode* APuzzlePlayerController::GetPuzzleGameMode()
     }
 
     return CachedGameMode;
+}
+
+void APuzzlePlayerController::DebugPuzzle()
+{
+    if (CachedGameMode)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DebugPuzzle command executed"));
+        CachedGameMode->DebugPuzzleState();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("DebugPuzzle: No GameMode found!"));
+    }
+}
+
+void APuzzlePlayerController::CheckPuzzleComplete()
+{
+    if (CachedGameMode)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("CheckPuzzleComplete command executed"));
+        CachedGameMode->ForceCheckGameCompletion();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("CheckPuzzleComplete: No GameMode found!"));
+    }
 }

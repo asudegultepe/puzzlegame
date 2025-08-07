@@ -16,6 +16,7 @@ APuzzlePiece::APuzzlePiece()
     CollisionBox->SetBoxExtent(FVector(50.0f, 50.0f, 25.0f));
     CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     CollisionBox->SetCollisionResponseToAllChannels(ECR_Block);
+    CollisionBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
     // Mesh komponenti oluştur
     PieceMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PieceMesh"));
@@ -68,8 +69,8 @@ void APuzzlePiece::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // Smooth movement için
-    if (bIsMoving)
+    // Only do smooth movement if not being selected/dragged
+    if (bIsMoving && !bIsSelected)
     {
         FVector CurrentLocation = GetActorLocation();
         FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetLocation, DeltaTime, MoveSpeed / 100.0f);
@@ -113,13 +114,8 @@ void APuzzlePiece::Tick(float DeltaTime)
 
 bool APuzzlePiece::CheckIfInCorrectPosition()
 {
-    if (CorrectPosition == FVector::ZeroVector)
-    {
-        // Doğru pozisyon henüz set edilmemiş
-        bIsInCorrectPosition = false;
-        return false;
-    }
-
+    // Remove the ZeroVector check - (0,0,0) is a valid position for center piece!
+    
     // 2D distance kullan (Z ignore et)
     float Distance = FVector::Dist2D(GetActorLocation(), CorrectPosition);
     bool bWasPreviouslyCorrect = bIsInCorrectPosition;
@@ -158,22 +154,25 @@ void APuzzlePiece::MovePieceToLocation(FVector NewLocation, bool bSmoothMove)
     // Z koordinatını sabit tut (ground level) - XY movement constraint
     NewLocation.Z = 0.0f;
 
-    // Boundary constraint check
-    APuzzleGameMode* GameMode = Cast<APuzzleGameMode>(GetWorld()->GetAuthGameMode());
-    if (GameMode && GameMode->IsBoundaryConstraintEnabled())
+    // Boundary constraint check - but skip if piece is being dragged
+    if (!bIsSelected)
     {
-        if (!GameMode->IsLocationWithinBoundary(NewLocation))
+        APuzzleGameMode* GameMode = Cast<APuzzleGameMode>(GetWorld()->GetAuthGameMode());
+        if (GameMode && GameMode->IsBoundaryConstraintEnabled())
         {
-            FVector OriginalLocation = NewLocation;
-            NewLocation = GameMode->ClampLocationToBoundary(NewLocation);
-
-            UE_LOG(LogTemp, Warning, TEXT("Piece %d boundary constraint: %s -> %s"),
-                PieceID, *OriginalLocation.ToString(), *NewLocation.ToString());
-
-            if (GEngine)
+            if (!GameMode->IsLocationWithinBoundary(NewLocation))
             {
-                GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow,
-                    FString::Printf(TEXT("Piece %d constrained to boundary"), PieceID));
+                FVector OriginalLocation = NewLocation;
+                NewLocation = GameMode->ClampLocationToBoundary(NewLocation);
+
+                UE_LOG(LogTemp, Warning, TEXT("Piece %d boundary constraint: %s -> %s"),
+                    PieceID, *OriginalLocation.ToString(), *NewLocation.ToString());
+
+                if (GEngine)
+                {
+                    GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow,
+                        FString::Printf(TEXT("Piece %d constrained to boundary"), PieceID));
+                }
             }
         }
     }
@@ -195,11 +194,15 @@ void APuzzlePiece::MovePieceToLocation(FVector NewLocation, bool bSmoothMove)
     }
     else
     {
-        SetActorLocation(NewLocation);
+        // For instant move, cancel any ongoing smooth movement
         bIsMoving = false;
+        TargetLocation = NewLocation;
+        
+        SetActorLocation(NewLocation);
         CheckIfInCorrectPosition();
 
-        UE_LOG(LogTemp, Log, TEXT("Piece %d instant move to: %s"), PieceID, *NewLocation.ToString());
+        UE_LOG(LogTemp, Warning, TEXT("Piece %d instant move to: %s (actual: %s)"), 
+            PieceID, *NewLocation.ToString(), *GetActorLocation().ToString());
     }
 }
 
@@ -286,5 +289,14 @@ void APuzzlePiece::DebugPrintInfo()
     {
         GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Magenta,
             FString::Printf(TEXT("Piece %d: Pos(%s) Scale(%s)"), PieceID, *Location.ToString(), *Scale.ToString()));
+    }
+}
+
+void APuzzlePiece::SetPieceMaterial(UMaterialInterface* NewMaterial)
+{
+    if (PieceMesh && NewMaterial)
+    {
+        PieceMesh->SetMaterial(0, NewMaterial);
+        UE_LOG(LogTemp, Warning, TEXT("Set material for Piece %d"), PieceID);
     }
 }
