@@ -1,7 +1,7 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "PuzzlePiece.h"
+#include "PuzzleGameMode.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Engine/Engine.h"
@@ -10,18 +10,18 @@ APuzzlePiece::APuzzlePiece()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    // Root component olarak collision box olu?tur
+    // Root component olarak collision box oluştur
     CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
     RootComponent = CollisionBox;
     CollisionBox->SetBoxExtent(FVector(50.0f, 50.0f, 25.0f));
     CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     CollisionBox->SetCollisionResponseToAllChannels(ECR_Block);
 
-    // Mesh komponenti olu?tur
+    // Mesh komponenti oluştur
     PieceMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PieceMesh"));
     PieceMesh->SetupAttachment(RootComponent);
 
-    // Varsay?lan de?erler
+    // Varsayılan değerler
     PieceID = -1;
     CorrectPosition = FVector::ZeroVector;
     bIsInCorrectPosition = false;
@@ -30,7 +30,13 @@ APuzzlePiece::APuzzlePiece()
     MoveSpeed = 1000.0f;
     bIsMoving = false;
 
-    // Overlap event'ini ba?la
+    // SCALE FIX - Default scale (1,1,1) garantisi
+    SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
+
+    // Debug log for scale initialization
+    UE_LOG(LogTemp, Warning, TEXT("PuzzlePiece spawned with normalized scale (1,1,1)"));
+
+    // Overlap event'ini bağla
     CollisionBox->OnComponentBeginOverlap.AddDynamic(this, &APuzzlePiece::OnOverlapBegin);
 }
 
@@ -38,7 +44,23 @@ void APuzzlePiece::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Ba?lang?�ta pozisyon kontrol� yap
+    // SCALE VERIFICATION - BeginPlay'de scale'i kontrol et ve düzelt
+    FVector CurrentScale = GetActorScale3D();
+    if (!CurrentScale.Equals(FVector(1.0f, 1.0f, 1.0f), 0.01f))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Scale inconsistency detected for Piece %d: %s"), PieceID, *CurrentScale.ToString());
+        SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
+        UE_LOG(LogTemp, Warning, TEXT("Scale corrected to (1,1,1) for Piece %d"), PieceID);
+
+        // Screen debug message
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Orange,
+                FString::Printf(TEXT("Scale corrected for Piece %d"), PieceID));
+        }
+    }
+
+    // Başlangıçta pozisyon kontrolü yap
     CheckIfInCorrectPosition();
 }
 
@@ -46,21 +68,45 @@ void APuzzlePiece::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // Smooth movement i�in
+    // Smooth movement için
     if (bIsMoving)
     {
         FVector CurrentLocation = GetActorLocation();
         FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetLocation, DeltaTime, MoveSpeed / 100.0f);
+
+        // Z koordinatını sabit tut (XY movement constraint)
+        NewLocation.Z = 0.0f;
+
         SetActorLocation(NewLocation);
 
-        // Hedefe ula?t?k m? kontrol et
-        if (FVector::Dist(NewLocation, TargetLocation) < 5.0f)
+        // Hedefe ulaştık mı kontrol et (2D distance kullan)
+        if (FVector::Dist2D(NewLocation, TargetLocation) < 5.0f)
         {
+            TargetLocation.Z = 0.0f; // Target'ı da Z=0 yap
             SetActorLocation(TargetLocation);
             bIsMoving = false;
 
-            // Pozisyon kontrol� yap
+            // Pozisyon kontrolü yap
             CheckIfInCorrectPosition();
+        }
+    }
+
+    // SCALE MONITORING - Her frame scale'i kontrol et (performance için her 30 frame'de bir)
+    static int32 FrameCounter = 0;
+    FrameCounter++;
+    if (FrameCounter % 30 == 0) // Her saniyede bir kontrol et (60fps varsayımıyla)
+    {
+        FVector CurrentScale = GetActorScale3D();
+        if (!CurrentScale.Equals(FVector(1.0f, 1.0f, 1.0f), 0.01f))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Runtime scale drift detected for Piece %d: %s"), PieceID, *CurrentScale.ToString());
+            SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
+
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red,
+                    FString::Printf(TEXT("Runtime scale corrected for Piece %d"), PieceID));
+            }
         }
     }
 }
@@ -69,32 +115,39 @@ bool APuzzlePiece::CheckIfInCorrectPosition()
 {
     if (CorrectPosition == FVector::ZeroVector)
     {
-        // Do?ru pozisyon hen�z set edilmemi?
+        // Doğru pozisyon henüz set edilmemiş
         bIsInCorrectPosition = false;
         return false;
     }
 
-    float Distance = FVector::Dist(GetActorLocation(), CorrectPosition);
+    // 2D distance kullan (Z ignore et)
+    float Distance = FVector::Dist2D(GetActorLocation(), CorrectPosition);
     bool bWasPreviouslyCorrect = bIsInCorrectPosition;
     bIsInCorrectPosition = Distance <= PositionTolerance;
 
-    // Durum de?i?ti mi kontrol et
+    // Durum değişti mi kontrol et
     if (bIsInCorrectPosition && !bWasPreviouslyCorrect)
     {
-        // Do?ru pozisyona yerle?tirildi
+        // Doğru pozisyona yerleştirildi
         OnCorrectPlacement();
 
-        // Debug mesaj?
+        // Debug mesajı
         if (GEngine)
         {
             GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Green,
-                FString::Printf(TEXT("Piece %d placed correctly!"), PieceID));
+                FString::Printf(TEXT("Piece %d placed correctly! Distance: %.1f"), PieceID, Distance));
         }
     }
     else if (!bIsInCorrectPosition && bWasPreviouslyCorrect)
     {
-        // Do?ru pozisyondan �?kar?ld?
+        // Doğru pozisyondan çıkarıldı
         OnIncorrectPlacement();
+
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red,
+                FString::Printf(TEXT("Piece %d moved from correct position"), PieceID));
+        }
     }
 
     return bIsInCorrectPosition;
@@ -102,16 +155,51 @@ bool APuzzlePiece::CheckIfInCorrectPosition()
 
 void APuzzlePiece::MovePieceToLocation(FVector NewLocation, bool bSmoothMove)
 {
+    // Z koordinatını sabit tut (ground level) - XY movement constraint
+    NewLocation.Z = 0.0f;
+
+    // Boundary constraint check
+    APuzzleGameMode* GameMode = Cast<APuzzleGameMode>(GetWorld()->GetAuthGameMode());
+    if (GameMode && GameMode->IsBoundaryConstraintEnabled())
+    {
+        if (!GameMode->IsLocationWithinBoundary(NewLocation))
+        {
+            FVector OriginalLocation = NewLocation;
+            NewLocation = GameMode->ClampLocationToBoundary(NewLocation);
+
+            UE_LOG(LogTemp, Warning, TEXT("Piece %d boundary constraint: %s -> %s"),
+                PieceID, *OriginalLocation.ToString(), *NewLocation.ToString());
+
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow,
+                    FString::Printf(TEXT("Piece %d constrained to boundary"), PieceID));
+            }
+        }
+    }
+
+    // Scale consistency check during movement
+    FVector CurrentScale = GetActorScale3D();
+    if (!CurrentScale.Equals(FVector(1.0f, 1.0f, 1.0f), 0.01f))
+    {
+        SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
+        UE_LOG(LogTemp, Warning, TEXT("Scale corrected during movement for Piece %d"), PieceID);
+    }
+
     if (bSmoothMove)
     {
         TargetLocation = NewLocation;
         bIsMoving = true;
+
+        UE_LOG(LogTemp, Log, TEXT("Piece %d smooth move to: %s"), PieceID, *NewLocation.ToString());
     }
     else
     {
         SetActorLocation(NewLocation);
         bIsMoving = false;
         CheckIfInCorrectPosition();
+
+        UE_LOG(LogTemp, Log, TEXT("Piece %d instant move to: %s"), PieceID, *NewLocation.ToString());
     }
 }
 
@@ -125,15 +213,36 @@ void APuzzlePiece::SetSelected(bool bSelected)
         {
             OnPieceSelected();
 
-            // Debug i�in se�ili par�ay? vurgula
+            // Scale consistency check during selection
+            FVector CurrentScale = GetActorScale3D();
+            if (!CurrentScale.Equals(FVector(1.0f, 1.0f, 1.0f), 0.01f))
+            {
+                SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
+                UE_LOG(LogTemp, Warning, TEXT("Scale corrected during selection for Piece %d"), PieceID);
+            }
+
+            // Debug için seçili parçayı vurgula
             if (PieceMesh && PieceMesh->GetMaterial(0))
             {
-                // Burada material parametresi de?i?tirilebilir
+                // Burada material parametresi değiştirilebilir
+                // CreateDynamicMaterialInstance ile glow effect eklenebilir
+            }
+
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Cyan,
+                    FString::Printf(TEXT("Piece %d selected"), PieceID));
             }
         }
         else
         {
             OnPieceDeselected();
+
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::White,
+                    FString::Printf(TEXT("Piece %d deselected"), PieceID));
+            }
         }
     }
 }
@@ -142,22 +251,49 @@ void APuzzlePiece::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* O
     UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
     bool bFromSweep, const FHitResult& SweepResult)
 {
-    // Ba?ka bir puzzle par�as? ile overlap oldu mu kontrol et
+    // Başka bir puzzle parçası ile overlap oldu mu kontrol et
     APuzzlePiece* OtherPiece = Cast<APuzzlePiece>(OtherActor);
     if (OtherPiece && OtherPiece != this)
     {
-        // ?ki par�an?n pozisyonunu de?i?tir
+        // İki parçanın pozisyonunu değiştir
         FVector MyLocation = GetActorLocation();
         FVector OtherLocation = OtherPiece->GetActorLocation();
+
+        // Z koordinatlarını 0 yap (ground level constraint)
+        MyLocation.Z = 0.0f;
+        OtherLocation.Z = 0.0f;
 
         MovePieceToLocation(OtherLocation, true);
         OtherPiece->MovePieceToLocation(MyLocation, true);
 
-        // Debug mesaj?
+        // Debug mesajı
         if (GEngine)
         {
-            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,
+            GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow,
                 FString::Printf(TEXT("Swapped pieces %d and %d"), PieceID, OtherPiece->GetPieceID()));
         }
+
+        UE_LOG(LogTemp, Log, TEXT("Position swap: Piece %d <-> Piece %d"), PieceID, OtherPiece->GetPieceID());
+    }
+}
+
+// Additional utility function for debugging
+void APuzzlePiece::DebugPrintInfo()
+{
+    FVector Location = GetActorLocation();
+    FVector Scale = GetActorScale3D();
+
+    UE_LOG(LogTemp, Warning, TEXT("=== Piece %d Debug Info ==="), PieceID);
+    UE_LOG(LogTemp, Warning, TEXT("Location: %s"), *Location.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("Scale: %s"), *Scale.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("Correct Position: %s"), *CorrectPosition.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("Is In Correct Position: %s"), bIsInCorrectPosition ? TEXT("True") : TEXT("False"));
+    UE_LOG(LogTemp, Warning, TEXT("Is Selected: %s"), bIsSelected ? TEXT("True") : TEXT("False"));
+    UE_LOG(LogTemp, Warning, TEXT("Is Moving: %s"), bIsMoving ? TEXT("True") : TEXT("False"));
+
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Magenta,
+            FString::Printf(TEXT("Piece %d: Pos(%s) Scale(%s)"), PieceID, *Location.ToString(), *Scale.ToString()));
     }
 }

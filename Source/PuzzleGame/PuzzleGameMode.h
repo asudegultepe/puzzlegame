@@ -6,6 +6,10 @@
 #include "GameFramework/GameModeBase.h"
 #include "PuzzlePiece.h"
 #include "Engine/TimerHandle.h"
+#include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/StaticMeshActor.h"
+#include "DrawDebugHelpers.h"
 #include "PuzzleGameMode.generated.h"
 
 // Oyun durumunu temsil eden enum
@@ -66,6 +70,32 @@ protected:
     // Timer handle
     FTimerHandle GameTimerHandle;
 
+    // Grid visualization - NEW
+    UPROPERTY(BlueprintReadOnly, Category = "Grid")
+    TArray<AStaticMeshActor*> GridMarkers;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    bool bShowGridMarkers;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    float GridMarkerScale;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    FLinearColor GridMarkerColor;
+
+    // Boundary constraint - NEW
+    UPROPERTY(BlueprintReadOnly, Category = "Boundary")
+    FVector BoundaryMin;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Boundary")
+    FVector BoundaryMax;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boundary")
+    bool bEnableBoundaryConstraint;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boundary")
+    float BoundaryPadding;
+
 public:
     // Event dispatchers
     UPROPERTY(BlueprintAssignable, Category = "Events")
@@ -119,6 +149,48 @@ public:
     UFUNCTION(BlueprintPure, Category = "Puzzle")
     float GetCompletionPercentage() const;
 
+    // Grid visualization functions - NEW
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void CreateGridVisualization();
+
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void ClearGridVisualization();
+
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void ToggleGridVisualization();
+
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void RefreshGridVisualization();
+
+    // Boundary constraint functions - NEW
+    UFUNCTION(BlueprintCallable, Category = "Boundary")
+    void CalculateBoundary();
+
+    UFUNCTION(BlueprintCallable, Category = "Boundary")
+    bool IsLocationWithinBoundary(const FVector& Location);
+
+    UFUNCTION(BlueprintCallable, Category = "Boundary")
+    FVector ClampLocationToBoundary(const FVector& Location);
+
+    UFUNCTION(BlueprintCallable, Category = "Boundary")
+    void EnforceAllPieceBoundaries();
+
+    UFUNCTION(BlueprintCallable, Category = "Boundary")
+    void SetBoundaryPadding(float NewPadding);
+    
+    UFUNCTION(BlueprintPure, Category = "Boundary")
+    bool IsBoundaryConstraintEnabled() const { return bEnableBoundaryConstraint; }
+
+    // Debug functions - NEW
+    UFUNCTION(BlueprintCallable, Category = "Debug")
+    void DrawBoundaryDebug();
+
+    UFUNCTION(BlueprintCallable, Category = "Debug")
+    void DebugGridSystem();
+
+    UFUNCTION(BlueprintCallable, Category = "Debug")
+    void PrintAllPiecePositions();
+
 protected:
     // Internal fonksiyonlar
     void InitializePuzzle();
@@ -127,4 +199,23 @@ protected:
 
     UFUNCTION()
     void OnTimerTick();
+
+    // Grid internal functions - NEW
+    void CreateGridMarker(const FVector& Position, int32 GridIndex);
+    void UpdateGridMarkerVisibility();
+    void SetGridMarkerMaterial(AStaticMeshActor* GridMarker, const FLinearColor& Color, float Opacity = 0.3f);
+
+    // Boundary internal functions - NEW
+    void UpdateBoundaryConstraints();
+    bool ValidatePuzzleConfiguration();
+
+private:
+    // Internal state tracking - NEW
+    bool bGridInitialized;
+    bool bBoundaryCalculated;
+    int32 LastBoundaryCheckFrame;
+
+    // Performance optimization - NEW
+    UPROPERTY()
+    TArray<UMaterialInstanceDynamic*> GridMarkerMaterials;
 };

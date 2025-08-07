@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -6,6 +6,8 @@
 #include "GameFramework/Actor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Engine/Engine.h"
 #include "PuzzlePiece.generated.h"
 
 UCLASS()
@@ -19,50 +21,50 @@ public:
 protected:
     virtual void BeginPlay() override;
 
-    // Mesh komponenti - puzzle par�as?n?n g�rsel temsili
+    // Mesh komponenti - puzzle parçasının görsel temsili
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UStaticMeshComponent* PieceMesh;
 
-    // Collision komponenti - etkile?im i�in
+    // Collision komponenti - etkileşim için
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UBoxComponent* CollisionBox;
 
-    // Puzzle par�as?n?n benzersiz ID'si
+    // Puzzle parçasının benzersiz ID'si
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle")
     int32 PieceID;
 
-    // Bu par�an?n do?ru olmas? gereken pozisyon
+    // Bu parçanın doğru olması gereken pozisyon
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle")
     FVector CorrectPosition;
 
-    // Par�an?n ?u anda do?ru konumda olup olmad???
+    // Parçanın şu anda doğru konumda olup olmadığı
     UPROPERTY(BlueprintReadOnly, Category = "Puzzle")
     bool bIsInCorrectPosition;
 
-    // Par�an?n se�ili olup olmad??? (s�r�kleme i�in)
+    // Parçanın seçili olup olmadığı (sürükleme için)
     UPROPERTY(BlueprintReadOnly, Category = "Puzzle")
     bool bIsSelected;
 
-    // Do?ru pozisyona ne kadar yak?n olmas? gerekti?i (tolerance)
+    // Doğru pozisyona ne kadar yakın olması gerektiği (tolerance)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle")
     float PositionTolerance;
 
 public:
     virtual void Tick(float DeltaTime) override;
 
-    // Par�an?n do?ru konumda olup olmad???n? kontrol et
+    // Parçanın doğru konumda olup olmadığını kontrol et
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     bool CheckIfInCorrectPosition();
 
-    // Par�ay? belirtilen konuma ta?? (animasyonlu)
+    // Parçayı belirtilen konuma taşı (animasyonlu)
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     void MovePieceToLocation(FVector NewLocation, bool bSmoothMove = true);
 
-    // Par�ay? se�/se�imi kald?r
+    // Parçayı seç/seçimi kaldır
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     void SetSelected(bool bSelected);
 
-    // Getter fonksiyonlar?
+    // Getter fonksiyonları
     UFUNCTION(BlueprintPure, Category = "Puzzle")
     int32 GetPieceID() const { return PieceID; }
 
@@ -72,7 +74,7 @@ public:
     UFUNCTION(BlueprintPure, Category = "Puzzle")
     bool IsInCorrectPosition() const { return bIsInCorrectPosition; }
 
-    // Setter fonksiyonlar?
+    // Setter fonksiyonları
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     void SetPieceID(int32 NewID) { PieceID = NewID; }
 
@@ -92,6 +94,10 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Puzzle")
     void OnPieceDeselected();
 
+    // Debug utility function
+    UFUNCTION(BlueprintCallable, Category = "Debug")
+    void DebugPrintInfo();
+
 protected:
     // Overlap event'leri
     UFUNCTION()
@@ -100,7 +106,7 @@ protected:
         bool bFromSweep, const FHitResult& SweepResult);
 
 private:
-    // Smooth movement i�in
+    // Smooth movement için
     FVector TargetLocation;
     bool bIsMoving;
     float MoveSpeed;
