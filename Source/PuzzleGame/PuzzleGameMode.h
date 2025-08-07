@@ -83,6 +83,10 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
     FLinearColor GridMarkerColor;
 
+    // Grid marker mesh
+    UPROPERTY()
+    UStaticMesh* GridMarkerMesh;
+
     // Boundary constraint - NEW
     UPROPERTY(BlueprintReadOnly, Category = "Boundary")
     FVector BoundaryMin;
@@ -177,9 +181,17 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Boundary")
     void SetBoundaryPadding(float NewPadding);
-    
+
     UFUNCTION(BlueprintPure, Category = "Boundary")
     bool IsBoundaryConstraintEnabled() const { return bEnableBoundaryConstraint; }
+
+    // Grid snapping function
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    FVector GetNearestGridPosition(const FVector& WorldPosition);
+    
+    // Find piece at grid position
+    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    APuzzlePiece* GetPieceAtGridPosition(const FVector& GridPosition);
 
     // Debug functions - NEW
     UFUNCTION(BlueprintCallable, Category = "Debug")

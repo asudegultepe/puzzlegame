@@ -2,10 +2,17 @@
 
 
 #include "PuzzleGameMode.h"
+#include "PuzzlePiece.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "TimerManager.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "DrawDebugHelpers.h"
 
 APuzzleGameMode::APuzzleGameMode()
 {
@@ -24,6 +31,22 @@ APuzzleGameMode::APuzzleGameMode()
 
     // Default puzzle piece class - Blueprint'te set edilecek
     PuzzlePieceClass = APuzzlePiece::StaticClass();
+    
+    // Boundary constraint settings
+    bEnableBoundaryConstraint = true;
+    BoundaryPadding = 50.0f;
+    
+    // Grid visualization
+    bShowGridMarkers = false;
+    GridMarkerScale = 0.8f;
+    GridMarkerColor = FLinearColor(0.0f, 1.0f, 0.0f, 0.3f);
+    
+    // Load grid marker mesh in constructor
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshFinder(TEXT("/Engine/BasicShapes/Cube"));
+    if (CubeMeshFinder.Succeeded())
+    {
+        GridMarkerMesh = CubeMeshFinder.Object;
+    }
 }
 
 void APuzzleGameMode::BeginPlay()
@@ -338,14 +361,10 @@ void APuzzleGameMode::CreateGridMarker(const FVector& Position, int32 GridIndex)
         // Get mesh component
         UStaticMeshComponent* MeshComp = GridMarker->GetStaticMeshComponent();
 
-        if (MeshComp)
+        if (MeshComp && GridMarkerMesh)
         {
-            // Set cube mesh (engine default)
-            static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube"));
-            if (CubeMesh.Succeeded())
-            {
-                MeshComp->SetStaticMesh(CubeMesh.Object);
-            }
+            // Set the pre-loaded cube mesh
+            MeshComp->SetStaticMesh(GridMarkerMesh);
 
             // Set position and scale
             GridMarker->SetActorLocation(Position);
@@ -358,8 +377,8 @@ void APuzzleGameMode::CreateGridMarker(const FVector& Position, int32 GridIndex)
                 UMaterialInstanceDynamic* DynamicMat = UMaterialInstanceDynamic::Create(DefaultMaterial, this);
                 if (DynamicMat)
                 {
-                    // Set grid marker color (semi-transparent green)
-                    DynamicMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.0f, 1.0f, 0.0f, 0.3f));
+                    // Set grid marker color from property
+                    DynamicMat->SetVectorParameterValue(TEXT("BaseColor"), GridMarkerColor);
                     MeshComp->SetMaterial(0, DynamicMat);
                 }
             }
@@ -527,7 +546,6 @@ void APuzzleGameMode::DebugGridSystem()
     }
 }
 
-
 void APuzzleGameMode::RefreshGridVisualization()
 {
     ClearGridVisualization();
@@ -568,4 +586,57 @@ void APuzzleGameMode::PrintAllPiecePositions()
     
     UE_LOG(LogTemp, Warning, TEXT("Total Pieces: %d, Completed: %d (%.1f%%)"),
         PuzzlePieces.Num(), GetCompletedPiecesCount(), GetCompletionPercentage());
+}
+
+FVector APuzzleGameMode::GetNearestGridPosition(const FVector& WorldPosition)
+{
+    FVector NearestPosition = WorldPosition;
+    float MinDistance = FLT_MAX;
+    
+    // Check all grid positions
+    for (int32 Row = 0; Row < PuzzleHeight; Row++)
+    {
+        for (int32 Col = 0; Col < PuzzleWidth; Col++)
+        {
+            FVector GridPosition = PuzzleStartLocation + FVector(
+                Col * PieceSpacing,
+                Row * PieceSpacing,
+                0.0f
+            );
+            
+            float Distance = FVector::Dist2D(WorldPosition, GridPosition);
+            if (Distance < MinDistance)
+            {
+                MinDistance = Distance;
+                NearestPosition = GridPosition;
+            }
+        }
+    }
+    
+    // Keep the Z coordinate at ground level
+    NearestPosition.Z = 0.0f;
+    
+    UE_LOG(LogTemp, Log, TEXT("Snapped position from %s to %s (distance: %.1f)"), 
+        *WorldPosition.ToString(), *NearestPosition.ToString(), MinDistance);
+    
+    return NearestPosition;
+}
+
+APuzzlePiece* APuzzleGameMode::GetPieceAtGridPosition(const FVector& GridPosition)
+{
+    // Check all pieces to find one at the given grid position
+    for (APuzzlePiece* Piece : PuzzlePieces)
+    {
+        if (Piece)
+        {
+            FVector PieceLocation = Piece->GetActorLocation();
+            // Check if piece is at this grid position (within a small tolerance)
+            if (FVector::Dist2D(PieceLocation, GridPosition) < 10.0f)
+            {
+                return Piece;
+            }
+        }
+    }
+    
+    return nullptr;
 }

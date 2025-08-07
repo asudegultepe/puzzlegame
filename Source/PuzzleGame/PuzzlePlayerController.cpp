@@ -2,12 +2,16 @@
 
 
 #include "PuzzlePlayerController.h"
+#include "PuzzlePiece.h"
+#include "PuzzleGameMode.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/EngineTypes.h"
+#include "CollisionQueryParams.h"
 
 APuzzlePlayerController::APuzzlePlayerController()
 {
@@ -219,30 +223,106 @@ void APuzzlePlayerController::EndDrag()
         return;
     }
 
-    // Check if we're dropping on another piece for swapping
-    FHitResult HitResult;
-    if (TraceUnderMouse(HitResult))
+    // Get the drop location
+    FVector DropLocation = GetMouseWorldLocation();
+    
+    // Find if we're dropping near another piece
+    APuzzlePiece* TargetPiece = nullptr;
+    float MinDistance = 1000.0f; // Detection radius
+    
+    if (CachedGameMode)
     {
-        APuzzlePiece* TargetPiece = Cast<APuzzlePiece>(HitResult.GetActor());
-        if (TargetPiece && TargetPiece != SelectedPiece)
+        TArray<APuzzlePiece*> AllPieces = CachedGameMode->GetPuzzlePieces();
+        FVector MyLocation = SelectedPiece->GetActorLocation();
+        
+        // Set selected piece location to drop location temporarily to check distances
+        MyLocation.X = DropLocation.X;
+        MyLocation.Y = DropLocation.Y;
+        MyLocation.Z = 0.0f;
+        
+        for (APuzzlePiece* Piece : AllPieces)
         {
-            // Swap positions with target piece
-            FVector MyLocation = SelectedPiece->GetActorLocation();
-            FVector TargetLocation = TargetPiece->GetActorLocation();
-
-            SelectedPiece->MovePieceToLocation(TargetLocation, true);
-            TargetPiece->MovePieceToLocation(MyLocation, true);
-
-            if (GEngine)
+            if (Piece && Piece != SelectedPiece)
             {
-                GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan,
-                    TEXT("Swapped pieces!"));
+                FVector PieceLocation = Piece->GetActorLocation();
+                float Distance = FVector::Dist2D(MyLocation, PieceLocation);
+                
+                if (Distance < MinDistance)
+                {
+                    MinDistance = Distance;
+                    TargetPiece = Piece;
+                }
+            }
+        }
+    }
+    
+    if (TargetPiece)
+    {
+        // Swap pieces
+        UE_LOG(LogTemp, Warning, TEXT("Swapping pieces: %d with %d"), 
+            SelectedPiece->GetPieceID(), TargetPiece->GetPieceID());
+        
+        FVector MyCurrentLocation = SelectedPiece->GetActorLocation();
+        FVector TargetCurrentLocation = TargetPiece->GetActorLocation();
+        
+        if (CachedGameMode)
+        {
+            // Snap both positions to grid
+            FVector MySnapLocation = CachedGameMode->GetNearestGridPosition(TargetCurrentLocation);
+            FVector TargetSnapLocation = CachedGameMode->GetNearestGridPosition(MyCurrentLocation);
+            
+            // Swap to snapped positions
+            SelectedPiece->MovePieceToLocation(MySnapLocation, true);
+            TargetPiece->MovePieceToLocation(TargetSnapLocation, true);
+        }
+        else
+        {
+            // Fallback: direct swap
+            SelectedPiece->MovePieceToLocation(TargetCurrentLocation, true);
+            TargetPiece->MovePieceToLocation(MyCurrentLocation, true);
+        }
+
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, 
+                FString::Printf(TEXT("Swapped pieces: %d <-> %d"), 
+                    SelectedPiece->GetPieceID(), TargetPiece->GetPieceID()));
+        }
+    }
+    else
+    {
+        // Drop at current location with grid snapping
+        if (CachedGameMode)
+        {
+            // Find the nearest grid position
+            FVector SnappedLocation = CachedGameMode->GetNearestGridPosition(DropLocation);
+            
+            // Check if there's already a piece at this grid position
+            APuzzlePiece* OccupyingPiece = CachedGameMode->GetPieceAtGridPosition(SnappedLocation);
+            
+            if (OccupyingPiece && OccupyingPiece != SelectedPiece)
+            {
+                // Swap with the piece occupying this grid position
+                FVector MyOriginalLocation = SelectedPiece->GetActorLocation();
+                FVector MySnapLocation = CachedGameMode->GetNearestGridPosition(MyOriginalLocation);
+                
+                SelectedPiece->MovePieceToLocation(SnappedLocation, true);
+                OccupyingPiece->MovePieceToLocation(MySnapLocation, true);
+                
+                if (GEngine)
+                {
+                    GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan,
+                        FString::Printf(TEXT("Swapped with piece at grid position!")));
+                }
+            }
+            else
+            {
+                // No piece at this position, just move there
+                SelectedPiece->MovePieceToLocation(SnappedLocation, true);
             }
         }
         else
         {
-            // Drop at current location
-            FVector DropLocation = GetMouseWorldLocation();
             SelectedPiece->MovePieceToLocation(DropLocation, true);
         }
     }
@@ -278,6 +358,13 @@ void APuzzlePlayerController::UpdateDragPosition()
     FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetLocation, GetWorld()->GetDeltaSeconds(), DragSmoothness);
 
     SelectedPiece->SetActorLocation(NewLocation);
+    
+    // Draw snap preview
+    if (CachedGameMode)
+    {
+        FVector SnapPosition = CachedGameMode->GetNearestGridPosition(TargetLocation);
+        DrawDebugBox(GetWorld(), SnapPosition + FVector(0, 0, 5), FVector(40, 40, 2), FColor::Green, false, 0.1f, 0, 3.0f);
+    }
 }
 
 bool APuzzlePlayerController::TraceUnderMouse(FHitResult& HitResult)
@@ -297,6 +384,12 @@ bool APuzzlePlayerController::TraceUnderMouse(FHitResult& HitResult)
     QueryParams.bTraceComplex = false;
     QueryParams.bReturnPhysicalMaterial = false;
     QueryParams.AddIgnoredActor(GetPawn());
+    
+    // If we're dragging a piece, ignore it in the trace
+    if (bIsDragging && SelectedPiece)
+    {
+        QueryParams.AddIgnoredActor(SelectedPiece);
+    }
 
     bool bHit = GetWorld()->LineTraceSingleByChannel(
         HitResult,
@@ -306,18 +399,6 @@ bool APuzzlePlayerController::TraceUnderMouse(FHitResult& HitResult)
         QueryParams
     );
 
-    // Debug draw the trace line
-#if WITH_EDITOR
-    if (bHit)
-    {
-        DrawDebugLine(GetWorld(), Start, HitResult.Location, FColor::Green, false, 0.1f, 0, 1.0f);
-        DrawDebugSphere(GetWorld(), HitResult.Location, 5.0f, 8, FColor::Red, false, 0.1f);
-    }
-    else
-    {
-        DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, 0.1f, 0, 1.0f);
-    }
-#endif
 
     return bHit;
 }

@@ -251,29 +251,20 @@ void APuzzlePiece::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* O
     UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
     bool bFromSweep, const FHitResult& SweepResult)
 {
-    // Başka bir puzzle parçası ile overlap oldu mu kontrol et
+    // Overlap detection for visual feedback only
+    // Actual swapping is handled by the PlayerController during drag-and-drop
+    
     APuzzlePiece* OtherPiece = Cast<APuzzlePiece>(OtherActor);
     if (OtherPiece && OtherPiece != this)
     {
-        // İki parçanın pozisyonunu değiştir
-        FVector MyLocation = GetActorLocation();
-        FVector OtherLocation = OtherPiece->GetActorLocation();
-
-        // Z koordinatlarını 0 yap (ground level constraint)
-        MyLocation.Z = 0.0f;
-        OtherLocation.Z = 0.0f;
-
-        MovePieceToLocation(OtherLocation, true);
-        OtherPiece->MovePieceToLocation(MyLocation, true);
-
-        // Debug mesajı
+        // Visual feedback for overlap
         if (GEngine)
         {
-            GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Yellow,
-                FString::Printf(TEXT("Swapped pieces %d and %d"), PieceID, OtherPiece->GetPieceID()));
+            GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Yellow,
+                FString::Printf(TEXT("Piece %d overlapping with %d"), PieceID, OtherPiece->GetPieceID()));
         }
-
-        UE_LOG(LogTemp, Log, TEXT("Position swap: Piece %d <-> Piece %d"), PieceID, OtherPiece->GetPieceID());
+        
+        // Could add visual highlighting here if needed
     }
 }
 
