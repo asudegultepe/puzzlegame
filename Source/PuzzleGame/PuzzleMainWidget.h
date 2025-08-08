@@ -20,8 +20,8 @@ class PUZZLEGAME_API UPuzzleMainWidget : public UUserWidget
     GENERATED_BODY()
     
 public:
-    // Initialize the widget
-    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    // Initialize the widget - DO NOT CALL FROM BLUEPRINT
+    UFUNCTION(BlueprintCallable, Category = "Internal", meta = (DeprecatedFunction, DeprecationMessage = "Do not call from Blueprint - called automatically"))
     void InitializeWidget();
     
     // Update game stats (matches OnStatsUpdated delegate signature)
@@ -40,6 +40,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     void InitializeWithPlayerController(APlayerController* PC);
     
+    // Refresh the piece list when a piece is placed
+    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    void RefreshPieceList();
+    
 protected:
     virtual void NativeConstruct() override;
     
@@ -57,10 +61,17 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UUserWidget> PuzzlePieceWidgetClass;
     
+    // Widget class for game completion screen
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UUserWidget> GameCompleteWidgetClass;
+    
 private:
     UFUNCTION()
     void OnPieceClicked(int32 PieceID);
     
     UPROPERTY()
     APuzzleGameMode* CachedGameMode;
+    
+    bool bIsInitialized = false;
+    bool bInitializationScheduled = false;
 };

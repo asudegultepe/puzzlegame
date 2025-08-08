@@ -41,6 +41,10 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Puzzle")
     void OnMaterialSet();
     
+    // Hide this widget when piece is placed
+    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    void HideWidget();
+    
     // Bind to button in Blueprint
     UPROPERTY(BlueprintReadWrite, meta = (BindWidget), Category = "UI")
     class UButton* PieceButton;

@@ -13,14 +13,11 @@
 void UPuzzlePieceWidget::SetPieceID(int32 NewPieceID)
 {
     PieceID = NewPieceID;
-    UE_LOG(LogTemp, Warning, TEXT("PuzzlePieceWidget: Set PieceID to %d"), PieceID);
 }
 
 void UPuzzlePieceWidget::SetPieceMaterial(UMaterialInterface* Material)
 {
     PieceMaterial = Material;
-    UE_LOG(LogTemp, Warning, TEXT("PuzzlePieceWidget: Set material for piece %d, Material: %s"), 
-        PieceID, Material ? *Material->GetName() : TEXT("NULL"));
     
     // Call Blueprint event to update button appearance
     OnMaterialSet();
@@ -32,8 +29,6 @@ void UPuzzlePieceWidget::NativeConstruct()
     
     // Ensure widget is visible and can receive input
     SetVisibility(ESlateVisibility::Visible);
-    
-    UE_LOG(LogTemp, Warning, TEXT("PuzzlePieceWidget: NativeConstruct called for piece %d"), PieceID);
 }
 
 FText UPuzzlePieceWidget::GetPieceDisplayText() const
@@ -43,23 +38,12 @@ FText UPuzzlePieceWidget::GetPieceDisplayText() const
 
 void UPuzzlePieceWidget::HandleClick()
 {
-    UE_LOG(LogTemp, Warning, TEXT("HandleClick called for piece %d"), PieceID);
-    UE_LOG(LogTemp, Warning, TEXT("OnPieceClicked has %d bindings"), OnPieceClicked.IsBound() ? 1 : 0);
-    
     OnPieceClicked.Broadcast(PieceID);
-    
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Green, 
-            FString::Printf(TEXT("Piece %d clicked in UI"), PieceID));
-    }
 }
 
 void UPuzzlePieceWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
 {
     Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
-    
-    UE_LOG(LogTemp, Warning, TEXT("Drag detected for piece %d"), PieceID);
     
     // Create drag drop operation
     UPuzzlePieceDragDropOperation* DragDropOp = NewObject<UPuzzlePieceDragDropOperation>();
@@ -85,8 +69,6 @@ void UPuzzlePieceWidget::NativeOnDragDetected(const FGeometry& InGeometry, const
 
 FReply UPuzzlePieceWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-    UE_LOG(LogTemp, Warning, TEXT("Mouse button down on piece %d"), PieceID);
-    
     if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
     {
         // Call HandleClick immediately on mouse down
@@ -97,4 +79,9 @@ FReply UPuzzlePieceWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
     }
     
     return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UPuzzlePieceWidget::HideWidget()
+{
+    SetVisibility(ESlateVisibility::Collapsed);
 }

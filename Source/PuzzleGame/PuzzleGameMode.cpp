@@ -64,19 +64,15 @@ void APuzzleGameMode::BeginPlay()
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), APuzzlePiece::StaticClass(), FoundPieces);
     if (FoundPieces.Num() > 0)
     {
-        UE_LOG(LogTemp, Error, TEXT("WARNING: Found %d puzzle pieces already in scene at BeginPlay!"), FoundPieces.Num());
         for (AActor* Actor : FoundPieces)
         {
             if (APuzzlePiece* Piece = Cast<APuzzlePiece>(Actor))
             {
-                UE_LOG(LogTemp, Error, TEXT("  - Existing Piece ID: %d at location %s"), 
-                    Piece->GetPieceID(), *Piece->GetActorLocation().ToString());
                     
                 // Destroy any pre-existing pieces
                 Piece->Destroy();
             }
         }
-        UE_LOG(LogTemp, Warning, TEXT("Destroyed all pre-existing pieces"));
     }
 
     // Puzzle'ı başlat
@@ -113,10 +109,6 @@ void APuzzleGameMode::StartGame()
         // İstatistikleri güncelle
         OnStatsUpdated.Broadcast(GameTime, TotalMoves);
 
-        if (GEngine)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, TEXT("Game Started!"));
-        }
     }
     else if (CurrentGameState == EPuzzleGameState::Paused)
     {
@@ -131,10 +123,6 @@ void APuzzleGameMode::PauseGame()
         CurrentGameState = EPuzzleGameState::Paused;
         GetWorldTimerManager().ClearTimer(GameTimerHandle);
 
-        if (GEngine)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, TEXT("Game Paused"));
-        }
     }
 }
 
@@ -145,10 +133,6 @@ void APuzzleGameMode::ResumeGame()
         CurrentGameState = EPuzzleGameState::InProgress;
         GetWorldTimerManager().SetTimer(GameTimerHandle, this, &APuzzleGameMode::OnTimerTick, 1.0f, true);
 
-        if (GEngine)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Green, TEXT("Game Resumed"));
-        }
     }
 }
 
@@ -189,13 +173,10 @@ void APuzzleGameMode::IncrementMoveCount()
 
 APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLocation)
 {
-    UE_LOG(LogTemp, Warning, TEXT("SpawnPuzzlePiece called: PieceID=%d, Location=%s, TotalPieces=%d"), 
-        PieceID, *SpawnLocation.ToString(), PuzzlePieces.Num());
     
     // Validate piece ID
     if (PieceID < 0 || PieceID >= PuzzlePieces.Num())
     {
-        UE_LOG(LogTemp, Error, TEXT("Invalid PieceID %d! Valid range is 0-%d"), PieceID, PuzzlePieces.Num()-1);
         return nullptr;
     }
     
@@ -206,30 +187,21 @@ APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLoca
         if (PuzzlePieces[i] != nullptr)
         {
             ExistingCount++;
-            UE_LOG(LogTemp, Verbose, TEXT("  Slot %d: Piece exists"), i);
         }
     }
-    UE_LOG(LogTemp, Warning, TEXT("Existing pieces in array: %d/%d"), ExistingCount, PuzzlePieces.Num());
     
     if (!PuzzlePieceClass)
     {
-        if (GEngine)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("PuzzlePieceClass not set!"));
-        }
         return nullptr;
     }
     
     // Check if this piece already exists
     if (PieceID >= 0 && PieceID < PuzzlePieces.Num() && PuzzlePieces[PieceID])
     {
-        UE_LOG(LogTemp, Error, TEXT("SpawnPuzzlePiece: Piece %d already exists! This should not happen."), PieceID);
-        UE_LOG(LogTemp, Error, TEXT("Existing piece location: %s"), *PuzzlePieces[PieceID]->GetActorLocation().ToString());
         
         // Check if it's in the available list
         if (AvailablePieceIDs.Contains(PieceID))
         {
-            UE_LOG(LogTemp, Error, TEXT("ERROR: Piece %d exists but is still in available list!"), PieceID);
         }
         
         // Still remove from available list if it somehow exists there
@@ -263,12 +235,9 @@ APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLoca
         if (PieceMaterials.IsValidIndex(PieceID))
         {
             NewPiece->SetPieceMaterial(PieceMaterials[PieceID]);
-            UE_LOG(LogTemp, Warning, TEXT("Applied material %d to Piece %d"), PieceID, PieceID);
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("No material for PieceID %d (Materials array size: %d)"), 
-                PieceID, PieceMaterials.Num());
         }
         
         // Store in array at correct index
@@ -293,11 +262,9 @@ APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLoca
         // Start the game timer if this is the first piece
         if (CurrentGameState == EPuzzleGameState::NotStarted)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Starting game after first piece spawn"));
             StartGame();
         }
         
-        UE_LOG(LogTemp, Warning, TEXT("Successfully spawned piece %d"), PieceID);
     }
 
     return NewPiece;
@@ -337,7 +304,6 @@ void APuzzleGameMode::ShufflePuzzlePieces()
 {
     // Since pieces are spawned from UI, we don't shuffle existing pieces
     // This function is kept for compatibility but does nothing in the new system
-    UE_LOG(LogTemp, Warning, TEXT("ShufflePuzzlePieces called but not needed in drag-from-UI mode"));
     
     // Comment out the shuffling logic as it's not compatible with UI-based spawning
     /*
@@ -398,11 +364,6 @@ void APuzzleGameMode::OnGameComplete()
     // Completion event'ini broadcast et
     OnGameCompleted.Broadcast(GameTime, TotalMoves);
 
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green,
-            FString::Printf(TEXT("Puzzle Completed! Time: %.1f seconds, Moves: %d"), GameTime, TotalMoves));
-    }
 }
 
 void APuzzleGameMode::OnTimerTick()
@@ -418,14 +379,12 @@ void APuzzleGameMode::InitializePuzzle()
 {
     CurrentGameState = EPuzzleGameState::NotStarted;
 
-    UE_LOG(LogTemp, Warning, TEXT("=== INITIALIZING PUZZLE GRID ==="));
     
     // Clear any existing pieces first
     for (int32 i = 0; i < PuzzlePieces.Num(); i++)
     {
         if (PuzzlePieces[i])
         {
-            UE_LOG(LogTemp, Warning, TEXT("Destroying existing piece %d during init"), i);
             PuzzlePieces[i]->Destroy();
             PuzzlePieces[i] = nullptr;
         }
@@ -475,7 +434,6 @@ void APuzzleGameMode::InitializePuzzle()
         UniqueCheck.Add(ID, &bAlreadyInSet);
         if (bAlreadyInSet)
         {
-            UE_LOG(LogTemp, Error, TEXT("DUPLICATE ID %d in available pieces!"), ID);
         }
     }
     
@@ -492,15 +450,11 @@ void APuzzleGameMode::InitializePuzzle()
     {
         InitialPieces += FString::Printf(TEXT("%d "), ID);
     }
-    UE_LOG(LogTemp, Warning, TEXT("%s (Total: %d)"), *InitialPieces, AvailablePieceIDs.Num());
 
-    UE_LOG(LogTemp, Warning, TEXT("Initialized puzzle grid for %d pieces"), TotalPieces);
-    UE_LOG(LogTemp, Warning, TEXT("Grid boundary: Min %s, Max %s"), *BoundaryMin.ToString(), *BoundaryMax.ToString());
 }
 
 void APuzzleGameMode::CreateGridVisualization()
 {
-    UE_LOG(LogTemp, Warning, TEXT("Creating grid visualization..."));
 
     // Clear existing markers
     ClearGridVisualization();
@@ -524,12 +478,9 @@ void APuzzleGameMode::CreateGridVisualization()
 
         // Debug sphere for visualization
 #if WITH_EDITOR
-        DrawDebugSphere(GetWorld(), GridPosition + FVector(0, 0, 25), 30.0f, 12, FColor::Green, true, -1.0f, 0, 2.0f);
-        DrawDebugString(GetWorld(), GridPosition + FVector(0, 0, 60), FString::Printf(TEXT("%d"), i), nullptr, FColor::White, -1.0f);
 #endif
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Created %d grid markers"), GridMarkers.Num());
 }
 
 void APuzzleGameMode::CreateGridMarker(const FVector& Position, int32 GridIndex)
@@ -573,14 +524,12 @@ void APuzzleGameMode::CreateGridMarker(const FVector& Position, int32 GridIndex)
 
             GridMarkers.Add(GridMarker);
 
-            UE_LOG(LogTemp, Log, TEXT("Grid marker %d created at position %s"), GridIndex, *Position.ToString());
         }
     }
 }
 
 void APuzzleGameMode::ClearGridVisualization()
 {
-    UE_LOG(LogTemp, Log, TEXT("Clearing %d existing grid markers"), GridMarkers.Num());
 
     for (AStaticMeshActor* Marker : GridMarkers)
     {
@@ -600,12 +549,10 @@ void APuzzleGameMode::ToggleGridVisualization()
     if (bShowGridMarkers)
     {
         CreateGridVisualization();
-        UE_LOG(LogTemp, Warning, TEXT("Grid visualization enabled"));
     }
     else
     {
         ClearGridVisualization();
-        UE_LOG(LogTemp, Warning, TEXT("Grid visualization disabled"));
     }
 }
 
@@ -623,7 +570,6 @@ void APuzzleGameMode::CalculateBoundary()
     BoundaryMin = MinCorner - FVector(BoundaryPadding, BoundaryPadding, 0.0f);
     BoundaryMax = MaxCorner + FVector(BoundaryPadding, BoundaryPadding, 0.0f);
 
-    UE_LOG(LogTemp, Warning, TEXT("Calculated boundary: Min(%s) Max(%s)"), *BoundaryMin.ToString(), *BoundaryMax.ToString());
 
     // Debug draw boundary box
     DrawBoundaryDebug();
@@ -668,21 +614,13 @@ void APuzzleGameMode::EnforceAllPieceBoundaries()
 
                 ConstrainedPieces++;
 
-                UE_LOG(LogTemp, Warning, TEXT("Piece %d moved from %s to %s (boundary constraint)"),
-                    Piece->GetPieceID(), *CurrentLocation.ToString(), *ConstrainedLocation.ToString());
 
-                if (GEngine)
-                {
-                    GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Orange,
-                        FString::Printf(TEXT("Piece %d returned to boundary"), Piece->GetPieceID()));
-                }
             }
         }
     }
 
     if (ConstrainedPieces > 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Boundary enforcement: %d pieces constrained"), ConstrainedPieces);
     }
 }
 
@@ -693,38 +631,13 @@ void APuzzleGameMode::DrawBoundaryDebug()
     FVector BoxCenter = (BoundaryMin + BoundaryMax) * 0.5f;
     FVector BoxExtent = (BoundaryMax - BoundaryMin) * 0.5f;
 
-    DrawDebugBox(GetWorld(), BoxCenter, BoxExtent, FColor::Red, true, -1.0f, 0, 3.0f);
-
-    // Draw corner markers
-    DrawDebugSphere(GetWorld(), BoundaryMin, 20.0f, 8, FColor::Red, true, -1.0f);
-    DrawDebugSphere(GetWorld(), BoundaryMax, 20.0f, 8, FColor::Red, true, -1.0f);
-    DrawDebugSphere(GetWorld(), FVector(BoundaryMin.X, BoundaryMax.Y, 0), 20.0f, 8, FColor::Red, true, -1.0f);
-    DrawDebugSphere(GetWorld(), FVector(BoundaryMax.X, BoundaryMin.Y, 0), 20.0f, 8, FColor::Red, true, -1.0f);
-
-    // Draw labels
-    DrawDebugString(GetWorld(), BoundaryMin + FVector(0, 0, 50), TEXT("MIN"), nullptr, FColor::Red, -1.0f);
-    DrawDebugString(GetWorld(), BoundaryMax + FVector(0, 0, 50), TEXT("MAX"), nullptr, FColor::Red, -1.0f);
 #endif
 }
 
 // Add to GameMode for testing
 void APuzzleGameMode::DebugGridSystem()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== GRID SYSTEM DEBUG ==="));
-    UE_LOG(LogTemp, Warning, TEXT("Grid Size: %dx%d"), PuzzleWidth, PuzzleHeight);
-    UE_LOG(LogTemp, Warning, TEXT("Piece Spacing: %.1f"), PieceSpacing);
-    UE_LOG(LogTemp, Warning, TEXT("Start Location: %s"), *PuzzleStartLocation.ToString());
-    UE_LOG(LogTemp, Warning, TEXT("Boundary Min: %s"), *BoundaryMin.ToString());
-    UE_LOG(LogTemp, Warning, TEXT("Boundary Max: %s"), *BoundaryMax.ToString());
-    UE_LOG(LogTemp, Warning, TEXT("Grid Markers: %d"), GridMarkers.Num());
-    UE_LOG(LogTemp, Warning, TEXT("Active Pieces: %d"), PuzzlePieces.Num());
 
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
-            FString::Printf(TEXT("Grid: %dx%d, Spacing: %.0f, Markers: %d"),
-                PuzzleWidth, PuzzleHeight, PieceSpacing, GridMarkers.Num()));
-    }
 }
 
 void APuzzleGameMode::RefreshGridVisualization()
@@ -742,12 +655,10 @@ void APuzzleGameMode::SetBoundaryPadding(float NewPadding)
     CalculateBoundary();
     EnforceAllPieceBoundaries();
     
-    UE_LOG(LogTemp, Log, TEXT("Boundary padding set to %.1f"), BoundaryPadding);
 }
 
 void APuzzleGameMode::PrintAllPiecePositions()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== ALL PIECE POSITIONS ==="));
     
     int32 TotalPieces = 0;
     int32 SpawnedPieces = 0;
@@ -773,31 +684,18 @@ void APuzzleGameMode::PrintAllPiecePositions()
             // Find which grid this piece is on
             int32 CurrentGridID = GetGridIDFromPosition(Location);
             
-            UE_LOG(LogTemp, Warning, TEXT("Piece %d: GridID:%d Current(%s) Correct(%s) InPosition:%s Distance:%.2f"),
-                Piece->GetPieceID(),
-                CurrentGridID,
-                *Location.ToString(),
-                *CorrectPos.ToString(),
-                bIsCorrect ? TEXT("Yes") : TEXT("No"),
-                FVector::Dist2D(Location, CorrectPos));
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("Piece %d: NOT SPAWNED"), i);
         }
     }
     
-    UE_LOG(LogTemp, Warning, TEXT("Total: %d, Spawned: %d, Correct: %d (%.1f%%)"),
-        TotalPieces, SpawnedPieces, CorrectPieces, 
-        SpawnedPieces > 0 ? (float)CorrectPieces / (float)SpawnedPieces * 100.0f : 0.0f);
     
     // Check completion
     bool bShouldBeComplete = SpawnedPieces == TotalPieces && CorrectPieces == TotalPieces;
-    UE_LOG(LogTemp, Warning, TEXT("Should game be complete? %s"), bShouldBeComplete ? TEXT("YES") : TEXT("NO"));
     
     if (bShouldBeComplete && CurrentGameState != EPuzzleGameState::Completed)
     {
-        UE_LOG(LogTemp, Error, TEXT("ERROR: Game should be complete but isn't! Forcing completion check..."));
         if (CheckGameCompletion())
         {
             OnGameComplete();
@@ -833,8 +731,6 @@ FVector APuzzleGameMode::GetNearestGridPosition(const FVector& WorldPosition)
     // Keep the Z coordinate at ground level
     NearestPosition.Z = 0.0f;
     
-    UE_LOG(LogTemp, Warning, TEXT("GetNearestGridPosition: from %s to %s (distance: %.1f)"), 
-        *WorldPosition.ToString(), *NearestPosition.ToString(), MinDistance);
     
     return NearestPosition;
 }
@@ -861,8 +757,6 @@ APuzzlePiece* APuzzleGameMode::GetPieceAtGridPosition(const FVector& GridPositio
 void APuzzleGameMode::RemovePieceFromAvailable(int32 PieceID)
 {
     int32 RemovedCount = AvailablePieceIDs.Remove(PieceID);
-    UE_LOG(LogTemp, Warning, TEXT("RemovePieceFromAvailable: PieceID=%d, Removed=%d, Remaining=%d"), 
-        PieceID, RemovedCount, AvailablePieceIDs.Num());
     
     // Debug: Print all remaining available pieces
     if (AvailablePieceIDs.Num() <= 3)
@@ -872,7 +766,6 @@ void APuzzleGameMode::RemovePieceFromAvailable(int32 PieceID)
         {
             RemainingPieces += FString::Printf(TEXT("%d "), ID);
         }
-        UE_LOG(LogTemp, Warning, TEXT("%s"), *RemainingPieces);
     }
 }
 
@@ -896,8 +789,6 @@ int32 APuzzleGameMode::GetGridIDFromPosition(const FVector& WorldPosition)
     // Convert to grid ID (row * width + col)
     int32 GridID = Row * PuzzleWidth + Col;
     
-    UE_LOG(LogTemp, Verbose, TEXT("GetGridIDFromPosition: Pos(%s) -> Grid(%d,%d) -> ID %d"), 
-        *WorldPosition.ToString(), Col, Row, GridID);
     
     return GridID;
 }
@@ -906,7 +797,6 @@ FVector APuzzleGameMode::GetGridPositionFromID(int32 GridID)
 {
     if (GridID < 0 || GridID >= PuzzleWidth * PuzzleHeight)
     {
-        UE_LOG(LogTemp, Warning, TEXT("GetGridPositionFromID: Invalid GridID %d"), GridID);
         return FVector::ZeroVector;
     }
     
@@ -948,7 +838,6 @@ void APuzzleGameMode::UpdateGridOccupancy(int32 GridID, APuzzlePiece* Piece)
 {
     if (GridID < 0 || GridID >= PuzzleWidth * PuzzleHeight || !GridOccupancy.IsValidIndex(GridID))
     {
-        UE_LOG(LogTemp, Warning, TEXT("UpdateGridOccupancy: Invalid GridID %d"), GridID);
         return;
     }
     
@@ -962,19 +851,16 @@ void APuzzleGameMode::UpdateGridOccupancy(int32 GridID, APuzzlePiece* Piece)
             if (GridOccupancy[i] == PieceID && i != GridID)
             {
                 GridOccupancy[i] = -1;
-                UE_LOG(LogTemp, Warning, TEXT("Removed Piece %d from GridID %d"), PieceID, i);
             }
         }
         
         // Now update at new position
         GridOccupancy[GridID] = PieceID;
-        UE_LOG(LogTemp, Warning, TEXT("Updated GridID %d with Piece %d"), GridID, PieceID);
     }
     else
     {
         // Clear the grid position
         GridOccupancy[GridID] = -1;
-        UE_LOG(LogTemp, Warning, TEXT("Cleared GridID %d"), GridID);
     }
 }
 
@@ -996,8 +882,6 @@ void APuzzleGameMode::SwapPiecesAtGridIDs(int32 GridID1, int32 GridID2)
     if (Piece1 && Piece2)
     {
         // Both positions occupied - swap them
-        UE_LOG(LogTemp, Warning, TEXT("Swapping Piece %d at GridID %d with Piece %d at GridID %d"),
-            Piece1->GetPieceID(), GridID1, Piece2->GetPieceID(), GridID2);
         
         // Move pieces
         Piece1->MovePieceToLocation(GridPos2, false);
@@ -1010,8 +894,6 @@ void APuzzleGameMode::SwapPiecesAtGridIDs(int32 GridID1, int32 GridID2)
     else if (Piece1 && !Piece2)
     {
         // Only position 1 occupied - move piece1 to position 2
-        UE_LOG(LogTemp, Warning, TEXT("Moving Piece %d from GridID %d to GridID %d"),
-            Piece1->GetPieceID(), GridID1, GridID2);
         
         Piece1->MovePieceToLocation(GridPos2, false);
         
@@ -1022,8 +904,6 @@ void APuzzleGameMode::SwapPiecesAtGridIDs(int32 GridID1, int32 GridID2)
     else if (!Piece1 && Piece2)
     {
         // Only position 2 occupied - move piece2 to position 1
-        UE_LOG(LogTemp, Warning, TEXT("Moving Piece %d from GridID %d to GridID %d"),
-            Piece2->GetPieceID(), GridID2, GridID1);
         
         Piece2->MovePieceToLocation(GridPos1, false);
         
@@ -1036,7 +916,6 @@ void APuzzleGameMode::SwapPiecesAtGridIDs(int32 GridID1, int32 GridID2)
 
 void APuzzleGameMode::ForceCheckGameCompletion()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== FORCE CHECK GAME COMPLETION ==="));
     
     // First print all positions
     PrintAllPiecePositions();
@@ -1044,57 +923,34 @@ void APuzzleGameMode::ForceCheckGameCompletion()
     // Force check
     if (CheckGameCompletion())
     {
-        UE_LOG(LogTemp, Warning, TEXT("Game is complete! Triggering OnGameComplete..."));
         OnGameComplete();
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Game is NOT complete"));
     }
 }
 
 void APuzzleGameMode::DebugPuzzleState()
 {
-    UE_LOG(LogTemp, Warning, TEXT(""));
-    UE_LOG(LogTemp, Warning, TEXT("========== DEBUG PUZZLE STATE =========="));
-    UE_LOG(LogTemp, Warning, TEXT("Game State: %d"), (int32)CurrentGameState);
-    UE_LOG(LogTemp, Warning, TEXT("Total Moves: %d"), TotalMoves);
-    UE_LOG(LogTemp, Warning, TEXT("Game Time: %.1f seconds"), GameTime);
-    UE_LOG(LogTemp, Warning, TEXT("Puzzle Config: %dx%d, Spacing: %.1f"), PuzzleWidth, PuzzleHeight, PieceSpacing);
-    UE_LOG(LogTemp, Warning, TEXT("Puzzle Start Location: %s"), *PuzzleStartLocation.ToString());
-    UE_LOG(LogTemp, Warning, TEXT(""));
     
     PrintAllPiecePositions();
     
-    UE_LOG(LogTemp, Warning, TEXT(""));
-    UE_LOG(LogTemp, Warning, TEXT("Grid Occupancy (Size: %d):"), GridOccupancy.Num());
     for (int32 i = 0; i < GridOccupancy.Num(); i++)
     {
         int32 PieceID = GridOccupancy[i];
         FVector GridPos = GetGridPositionFromID(i);
         if (PieceID >= 0)
         {
-            UE_LOG(LogTemp, Warning, TEXT("  GridID %d -> PieceID %d at %s"), i, PieceID, *GridPos.ToString());
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("  GridID %d -> EMPTY at %s"), i, *GridPos.ToString());
         }
     }
     
-    UE_LOG(LogTemp, Warning, TEXT("========================================"));
-    UE_LOG(LogTemp, Warning, TEXT(""));
     
     // Also show on screen
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow,
-            FString::Printf(TEXT("Completed: %d/%d pieces"), GetCompletedPiecesCount(), PuzzlePieces.Num()));
-    }
     
     // Check which piece is at wrong position
-    UE_LOG(LogTemp, Warning, TEXT(""));
-    UE_LOG(LogTemp, Warning, TEXT("=== CHECKING WRONG PIECES ==="));
     for (int32 i = 0; i < PuzzlePieces.Num(); i++)
     {
         if (PuzzlePieces[i] && !PuzzlePieces[i]->IsInCorrectPosition())
@@ -1103,31 +959,23 @@ void APuzzleGameMode::DebugPuzzleState()
             FVector CorrectPos = PuzzlePieces[i]->GetCorrectPosition();
             float Distance = FVector::Dist2D(CurrentPos, CorrectPos);
             
-            UE_LOG(LogTemp, Error, TEXT("WRONG: Piece %d is at %s but should be at %s (Distance: %.2f)"),
-                i, *CurrentPos.ToString(), *CorrectPos.ToString(), Distance);
         }
     }
     
     // Check if any grid position is empty
-    UE_LOG(LogTemp, Warning, TEXT(""));
-    UE_LOG(LogTemp, Warning, TEXT("=== CHECKING EMPTY GRIDS ==="));
     for (int32 i = 0; i < GridOccupancy.Num(); i++)
     {
         if (GridOccupancy[i] < 0)
         {
             FVector GridPos = GetGridPositionFromID(i);
-            UE_LOG(LogTemp, Error, TEXT("EMPTY: GridID %d at %s has no piece!"), i, *GridPos.ToString());
         }
     }
     
     // Special check for Piece 8
-    UE_LOG(LogTemp, Warning, TEXT(""));
-    UE_LOG(LogTemp, Warning, TEXT("=== LOOKING FOR PIECE 8 ==="));
     if (PuzzlePieces.IsValidIndex(8) && PuzzlePieces[8])
     {
         FVector Piece8Pos = PuzzlePieces[8]->GetActorLocation();
         int32 Piece8GridID = GetGridIDFromPosition(Piece8Pos);
-        UE_LOG(LogTemp, Warning, TEXT("Piece 8 is at %s (GridID: %d)"), *Piece8Pos.ToString(), Piece8GridID);
         
         // Check if it's registered in grid occupancy
         bool bFoundInOccupancy = false;
@@ -1136,17 +984,14 @@ void APuzzleGameMode::DebugPuzzleState()
             if (GridOccupancy[i] == 8)
             {
                 bFoundInOccupancy = true;
-                UE_LOG(LogTemp, Warning, TEXT("Piece 8 is registered at GridID %d"), i);
                 break;
             }
         }
         if (!bFoundInOccupancy)
         {
-            UE_LOG(LogTemp, Error, TEXT("Piece 8 is NOT registered in grid occupancy!"));
         }
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("Piece 8 doesn't exist!"));
     }
 }

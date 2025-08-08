@@ -4,14 +4,18 @@
 #include "PuzzlePlayerController.h"
 #include "PuzzlePiece.h"
 #include "PuzzleGameMode.h"
+#include "PuzzleMainWidget.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/EngineTypes.h"
 #include "CollisionQueryParams.h"
+#include "Framework/Application/NavigationConfig.h"
+#include "GameFramework/InputSettings.h"
 
 APuzzlePlayerController::APuzzlePlayerController()
 {
@@ -63,24 +67,44 @@ void APuzzlePlayerController::BeginPlay()
     // Cache game mode reference
     CachedGameMode = GetPuzzleGameMode();
 
-    // Debug log to verify this is the correct controller
-    UE_LOG(LogTemp, Warning, TEXT("APuzzlePlayerController::BeginPlay - Controller Class: %s"), *GetClass()->GetName());
+    
+    // First, clean up any existing widgets that might have been created by Blueprint
+    if (MainWidgetClass)
+    {
+        TArray<UUserWidget*> ExistingWidgets;
+        UWidgetBlueprintLibrary::GetAllWidgetsOfClass(GetWorld(), ExistingWidgets, MainWidgetClass, false);
+        
+        
+        for (UUserWidget* Widget : ExistingWidgets)
+        {
+            if (Widget)
+            {
+                Widget->RemoveFromParent();
+            }
+        }
+    }
+    
+    // Also check for any UserWidget that might be our MainWidget
+    TArray<UUserWidget*> AllWidgets;
+    UWidgetBlueprintLibrary::GetAllWidgetsOfClass(GetWorld(), AllWidgets, UUserWidget::StaticClass(), false);
+    
+    
+    for (UUserWidget* Widget : AllWidgets)
+    {
+        if (Widget)
+        {
+        }
+    }
     
     // Show main widget if available
     if (MainWidgetClass)
     {
-        UE_LOG(LogTemp, Warning, TEXT("MainWidgetClass is set, calling ShowMainWidget"));
         ShowMainWidget();
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("MainWidgetClass is NULL! Set it in BP_PuzzlePlayerController"));
     }
 
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Blue, TEXT("PuzzlePlayerController initialized"));
-    }
 }
 
 void APuzzlePlayerController::SetupInputComponent()
@@ -129,7 +153,6 @@ void APuzzlePlayerController::OnLeftClickPressed(const FInputActionValue& Value)
 {
     bMousePressed = true;
     
-    UE_LOG(LogTemp, Warning, TEXT("Left click pressed. Current state: %d"), (int32)CurrentInteractionState);
 
     if (CurrentInteractionState == EMouseInteractionState::None)
     {
@@ -138,13 +161,11 @@ void APuzzlePlayerController::OnLeftClickPressed(const FInputActionValue& Value)
 
         if (ClickedPiece)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Clicked on piece %d"), ClickedPiece->GetPieceID());
             // Start dragging the piece
             StartDragPiece(ClickedPiece);
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("No piece under mouse"));
         }
     }
 }
@@ -175,11 +196,9 @@ void APuzzlePlayerController::OnToggleUI(const FInputActionValue& Value)
 
 void APuzzlePlayerController::StartDragFromUI(int32 PieceID)
 {
-    UE_LOG(LogTemp, Warning, TEXT("StartDragFromUI called with PieceID: %d"), PieceID);
     
     if (CurrentInteractionState != EMouseInteractionState::None)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Already in interaction state: %d"), (int32)CurrentInteractionState);
         return; // Already in an interaction
     }
 
@@ -187,17 +206,14 @@ void APuzzlePlayerController::StartDragFromUI(int32 PieceID)
     FVector PieceSpawnLocation = GetMouseWorldLocation();
     PieceSpawnLocation.Z = 0.0f; // Keep at ground level
     
-    UE_LOG(LogTemp, Warning, TEXT("Spawn location: %s"), *PieceSpawnLocation.ToString());
 
     // Spawn new puzzle piece at mouse location
     if (CachedGameMode)
     {
-        UE_LOG(LogTemp, Warning, TEXT("CachedGameMode exists, calling SpawnPuzzlePiece"));
         
         APuzzlePiece* NewPiece = CachedGameMode->SpawnPuzzlePiece(PieceID, PieceSpawnLocation);
         if (NewPiece)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Piece spawned successfully"));
             
             // Set state to DraggingFromUI before starting drag
             CurrentInteractionState = EMouseInteractionState::DraggingFromUI;
@@ -207,25 +223,28 @@ void APuzzlePlayerController::StartDragFromUI(int32 PieceID)
             
             StartDragPiece(NewPiece);
 
-            if (GEngine)
+            
+            // Refresh UI to remove the placed piece
+            if (MainWidget)
             {
-                GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Green,
-                    FString::Printf(TEXT("Spawned piece %d from UI"), PieceID));
+                if (UPuzzleMainWidget* PuzzleWidget = Cast<UPuzzleMainWidget>(MainWidget))
+                {
+                    PuzzleWidget->RefreshPieceList();
+                }
+                else
+                {
+                }
+            }
+            else
+            {
             }
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("SpawnPuzzlePiece returned null for PieceID %d!"), PieceID);
-            if (GEngine)
-            {
-                GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red,
-                    FString::Printf(TEXT("Failed to spawn piece %d - may already exist"), PieceID));
-            }
         }
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("CachedGameMode is null!"));
     }
 }
 
@@ -233,13 +252,11 @@ void APuzzlePlayerController::StartDragPiece(APuzzlePiece* Piece)
 {
     if (!Piece)
     {
-        UE_LOG(LogTemp, Warning, TEXT("StartDragPiece: Piece is null"));
         return;
     }
     
     if (CurrentInteractionState != EMouseInteractionState::None && CurrentInteractionState != EMouseInteractionState::DraggingFromUI)
     {
-        UE_LOG(LogTemp, Warning, TEXT("StartDragPiece: Already in state %d"), (int32)CurrentInteractionState);
         return;
     }
 
@@ -249,18 +266,20 @@ void APuzzlePlayerController::StartDragPiece(APuzzlePiece* Piece)
     // Set piece as selected
     SelectedPiece->SetSelected(true);
 
-    // Calculate drag offset
-    DragStartLocation = SelectedPiece->GetActorLocation();
-    
     // For UI spawned pieces, always use zero offset
     if (CurrentInteractionState == EMouseInteractionState::DraggingFromUI)
     {
         DragOffset = FVector::ZeroVector;
+        // For UI spawned pieces, set an invalid drag start location to indicate it's new
+        DragStartLocation = FVector(-9999, -9999, -9999); // Invalid location
         CurrentInteractionState = EMouseInteractionState::DraggingPiece; // Change to regular dragging
     }
     else
     {
-        // For pieces already in scene, calculate proper offset
+        // For pieces already in scene, store their current grid position
+        DragStartLocation = SelectedPiece->GetActorLocation();
+        
+        // Calculate proper offset
         FVector MouseWorld = GetMouseWorldLocation();
         DragOffset = DragStartLocation - MouseWorld;
         CurrentInteractionState = EMouseInteractionState::DraggingPiece;
@@ -275,11 +294,6 @@ void APuzzlePlayerController::StartDragPiece(APuzzlePiece* Piece)
     SetInputMode(GameOnlyMode);
     bShowMouseCursor = true; // Keep cursor visible
 
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,
-            FString::Printf(TEXT("Started dragging piece %d"), SelectedPiece->GetPieceID()));
-    }
 }
 
 void APuzzlePlayerController::EndDrag()
@@ -304,7 +318,6 @@ void APuzzlePlayerController::EndDrag()
     if (TargetPiece && TargetPiece != SelectedPiece)
     {
         // Swap pieces using the new grid occupancy system
-        UE_LOG(LogTemp, Warning, TEXT("Swapping pieces: %d with %d"), SelectedPiece->GetPieceID(), TargetPiece->GetPieceID());
         
         if (CachedGameMode)
         {
@@ -322,10 +335,6 @@ void APuzzlePlayerController::EndDrag()
             }
         }
 
-        if (GEngine)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, TEXT("Swapped pieces!"));
-        }
     }
     else
     {
@@ -339,6 +348,9 @@ void APuzzlePlayerController::EndDrag()
             FVector CurrentPieceLocation = SelectedPiece->GetActorLocation();
             int32 TargetGridID = CachedGameMode->GetGridIDFromPosition(CurrentPieceLocation);
             
+            // Check if this is a new piece from UI (StartGridID would be -1)
+            bool bIsNewPieceFromUI = (StartGridID < 0);
+            
             if (TargetGridID >= 0 && TargetGridID != StartGridID)
             {
                 // Check if target position is occupied
@@ -348,6 +360,11 @@ void APuzzlePlayerController::EndDrag()
                 {
                     // Target is occupied - swap with it
                     CachedGameMode->SwapPiecesAtGridIDs(StartGridID, TargetGridID);
+                    // Only increment move count for actual swaps (not initial placement)
+                    if (!bIsNewPieceFromUI)
+                    {
+                        CachedGameMode->IncrementMoveCount();
+                    }
                 }
                 else
                 {
@@ -357,10 +374,13 @@ void APuzzlePlayerController::EndDrag()
                     
                     // Update grid occupancy
                     CachedGameMode->UpdateGridOccupancy(TargetGridID, SelectedPiece);
+                    
+                    // Only increment move count if this is not the initial placement from UI
+                    if (!bIsNewPieceFromUI)
+                    {
+                        CachedGameMode->IncrementMoveCount();
+                    }
                 }
-                
-                // Increment move count since we moved
-                CachedGameMode->IncrementMoveCount();
             }
             else if (TargetGridID == StartGridID)
             {
@@ -391,12 +411,7 @@ void APuzzlePlayerController::EndDrag()
         SetInputMode(InputMode);
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Drag ended. State reset to None"));
     
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Orange, TEXT("Drag ended - State reset"));
-    }
 }
 
 void APuzzlePlayerController::UpdateDragPosition()
@@ -509,7 +524,6 @@ APuzzlePiece* APuzzlePlayerController::GetPuzzlePieceUnderMouse()
         AActor* HitActor = HitResult.GetActor();
         if (HitActor)
         {
-            UE_LOG(LogTemp, Verbose, TEXT("Hit actor: %s"), *HitActor->GetClass()->GetName());
             APuzzlePiece* Piece = Cast<APuzzlePiece>(HitActor);
             if (Piece)
             {
@@ -523,26 +537,82 @@ APuzzlePiece* APuzzlePlayerController::GetPuzzlePieceUnderMouse()
 
 void APuzzlePlayerController::ShowMainWidget()
 {
+    static UUserWidget* GlobalMainWidget = nullptr;
+    
+    // First, find and remove ALL existing MainWidgets
+    TArray<UUserWidget*> FoundWidgets;
+    UWidgetBlueprintLibrary::GetAllWidgetsOfClass(GetWorld(), FoundWidgets, MainWidgetClass, false);
+    
+    
+    // Remove all existing widgets first
+    for (UUserWidget* Widget : FoundWidgets)
+    {
+        if (Widget && Widget->IsInViewport())
+        {
+            Widget->RemoveFromParent();
+        }
+    }
+    
+    // Clear our reference if it was removed
+    if (MainWidget && (!IsValid(MainWidget) || !MainWidget->IsInViewport()))
+    {
+        MainWidget = nullptr;
+    }
+    
+    // Check if another instance already created the widget
+    if (GlobalMainWidget && GlobalMainWidget != MainWidget)
+    {
+        // Validate the pointer is still valid
+        if (IsValid(GlobalMainWidget))
+        {
+            // Remove the duplicate
+            if (GlobalMainWidget->IsInViewport())
+            {
+                GlobalMainWidget->RemoveFromParent();
+            }
+            
+            if (!MainWidget)
+            {
+                MainWidget = GlobalMainWidget;
+            }
+        }
+        else
+        {
+            // Invalid pointer, clear it
+            GlobalMainWidget = nullptr;
+        }
+    }
+    
     if (MainWidgetClass && !MainWidget)
     {
         MainWidget = CreateWidget<UUserWidget>(this, MainWidgetClass);
         
         if (MainWidget)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Created MainWidget with owner: %s"), *GetClass()->GetName());
+            GlobalMainWidget = MainWidget;
         }
     }
 
-    if (MainWidget)
+    if (MainWidget && IsValid(MainWidget))
     {
-        MainWidget->AddToViewport();
+        if (!MainWidget->IsInViewport())
+        {
+            MainWidget->AddToViewport();
+        }
         
-        // Set input mode to allow both game and UI
-        FInputModeGameAndUI InputMode;
-        InputMode.SetWidgetToFocus(nullptr); // Don't focus on widget
-        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        InputMode.SetHideCursorDuringCapture(false);
-        SetInputMode(InputMode);
+        // Defer input mode setting to next frame to ensure everything is initialized
+        GetWorld()->GetTimerManager().SetTimerForNextTick([this]()
+        {
+            if (IsValid(this) && IsValid(MainWidget))
+            {
+                // Set input mode to allow both game and UI
+                FInputModeGameAndUI InputMode;
+                InputMode.SetWidgetToFocus(nullptr); // Don't focus on widget
+                InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+                InputMode.SetHideCursorDuringCapture(false);
+                SetInputMode(InputMode);
+            }
+        });
     }
 }
 
@@ -603,7 +673,6 @@ void APuzzlePlayerController::HandleDragUpdate()
     }
     else if (bIsDragging)
     {
-        UE_LOG(LogTemp, Warning, TEXT("HandleDragUpdate: bIsDragging is true but state is %d"), (int32)CurrentInteractionState);
     }
 }
 
@@ -621,12 +690,10 @@ void APuzzlePlayerController::DebugPuzzle()
 {
     if (CachedGameMode)
     {
-        UE_LOG(LogTemp, Warning, TEXT("DebugPuzzle command executed"));
         CachedGameMode->DebugPuzzleState();
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("DebugPuzzle: No GameMode found!"));
     }
 }
 
@@ -634,11 +701,9 @@ void APuzzlePlayerController::CheckPuzzleComplete()
 {
     if (CachedGameMode)
     {
-        UE_LOG(LogTemp, Warning, TEXT("CheckPuzzleComplete command executed"));
         CachedGameMode->ForceCheckGameCompletion();
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("CheckPuzzleComplete: No GameMode found!"));
     }
 }
