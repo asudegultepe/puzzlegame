@@ -27,22 +27,22 @@ APuzzleGameMode::APuzzleGameMode()
     // Puzzle konfigürasyonu
     PuzzleWidth = 3;
     PuzzleHeight = 3;
-    PieceSpacing = 260.0f; // Match Blueprint value
-    PuzzleStartLocation = FVector(-260.0f, -260.0f, 0.0f); // Match Blueprint value
+    PieceSpacing = 260.0f; 
+    PuzzleStartLocation = FVector(-260.0f, -260.0f, 0.0f); 
 
-    // Default puzzle piece class - Blueprint'te set edilecek
+    // Default puzzle piece class blueprint'te set edilecek
     PuzzlePieceClass = APuzzlePiece::StaticClass();
     
-    // Boundary constraint settings
+    // Boundary constraint ayarları
     bEnableBoundaryConstraint = true;
-    BoundaryPadding = 200.0f; // Increased padding for more movement freedom
-    
-    // Grid visualization
+    BoundaryPadding = 200.0f; 
+
+    // Dogru yerleştirme
     bShowGridMarkers = false;
     GridMarkerScale = 0.8f;
     GridMarkerColor = FLinearColor(0.0f, 1.0f, 0.0f, 0.3f);
     
-    // Load grid marker mesh in constructor
+    // Gridler için debug küpleri
     static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshFinder(TEXT("/Engine/BasicShapes/Cube"));
     if (CubeMeshFinder.Succeeded())
     {
@@ -52,14 +52,14 @@ APuzzleGameMode::APuzzleGameMode()
 
 APuzzleGameMode::~APuzzleGameMode()
 {
-    // Destructor is empty - UPROPERTY arrays are managed by Unreal
+    // Destructor
 }
 
 void APuzzleGameMode::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Check if any puzzle pieces already exist in the scene
+    // Sahnede herhangi bir bulmaca parçasının mevcut kontrolü
     TArray<AActor*> FoundPieces;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), APuzzlePiece::StaticClass(), FoundPieces);
     if (FoundPieces.Num() > 0)
@@ -69,7 +69,7 @@ void APuzzleGameMode::BeginPlay()
             if (APuzzlePiece* Piece = Cast<APuzzlePiece>(Actor))
             {
                     
-                // Destroy any pre-existing pieces
+                // Önceki parçaları temizle
                 Piece->Destroy();
             }
         }
@@ -81,11 +81,8 @@ void APuzzleGameMode::BeginPlay()
 
 void APuzzleGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // Clear timer first
+    // Timer sıfırla
     GetWorldTimerManager().ClearTimer(GameTimerHandle);
-    
-    // Don't manually clear UPROPERTY arrays in EndPlay
-    // Unreal Engine will handle the cleanup automatically
     
     Super::EndPlay(EndPlayReason);
 }
@@ -99,9 +96,6 @@ void APuzzleGameMode::StartGame()
         GameTime = 0.0f;
         TotalMoves = 0;
         CurrentGameState = EPuzzleGameState::InProgress;
-
-        // Puzzle parçalarını karıştır
-        ShufflePuzzlePieces();
 
         // Timer'ı başlat
         GetWorldTimerManager().SetTimer(GameTimerHandle, this, &APuzzleGameMode::OnTimerTick, 1.0f, true);
@@ -148,10 +142,10 @@ void APuzzleGameMode::RestartGame()
     }
     PuzzlePieces.Empty();
 
-    // Timer'ı durdur
+    // Timerı durdur
     GetWorldTimerManager().ClearTimer(GameTimerHandle);
 
-    // Puzzle'ı yeniden başlat
+    // Puzzleı yeniden başlat
     InitializePuzzle();
     StartGame();
 }
@@ -174,13 +168,12 @@ void APuzzleGameMode::IncrementMoveCount()
 APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLocation)
 {
     
-    // Validate piece ID
+    // piece ID null mu
     if (PieceID < 0 || PieceID >= PuzzlePieces.Num())
     {
         return nullptr;
     }
     
-    // Debug: Check how many pieces already exist
     int32 ExistingCount = 0;
     for (int32 i = 0; i < PuzzlePieces.Num(); i++)
     {
@@ -195,11 +188,11 @@ APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLoca
         return nullptr;
     }
     
-    // Check if this piece already exists
+    //İstenilen parça eşsiz mi
     if (PieceID >= 0 && PieceID < PuzzlePieces.Num() && PuzzlePieces[PieceID])
     {
         
-        // Check if it's in the available list
+        // Musait listedeyse spawn et
         if (AvailablePieceIDs.Contains(PieceID))
         {
         }
@@ -221,7 +214,7 @@ APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLoca
     {
         NewPiece->SetPieceID(PieceID);
         
-        // Calculate correct position for this piece
+        // Bu parça için doğru pozisyon hesabı
         int32 Row = PieceID / PuzzleWidth;
         int32 Col = PieceID % PuzzleWidth;
         FVector CorrectPosition = PuzzleStartLocation + FVector(
@@ -231,7 +224,7 @@ APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLoca
         );
         NewPiece->SetCorrectPosition(CorrectPosition);
         
-        // Set material based on PieceID if materials are configured
+        // Set material et
         if (PieceMaterials.IsValidIndex(PieceID))
         {
             NewPiece->SetPieceMaterial(PieceMaterials[PieceID]);
@@ -240,16 +233,16 @@ APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLoca
         {
         }
         
-        // Store in array at correct index
+        // Daha sonra ulaşmak için Array e ekle
         if (PieceID >= 0 && PieceID < PuzzlePieces.Num())
         {
             PuzzlePieces[PieceID] = NewPiece;
         }
 
-        // Remove from available list
+        // Musait listesinden çıkar
         RemovePieceFromAvailable(PieceID);
         
-        // Register in grid occupancy
+        // Grid yerini güncelle
         int32 SpawnGridID = GetGridIDFromPosition(SpawnLocation);
         if (SpawnGridID >= 0)
         {
@@ -257,9 +250,9 @@ APuzzlePiece* APuzzleGameMode::SpawnPuzzlePiece(int32 PieceID, FVector SpawnLoca
         }
         
         // Hamle sayısını artır
-        IncrementMoveCount();
+        //IncrementMoveCount();
         
-        // Start the game timer if this is the first piece
+        // İlk parça yerleştirildiğinde timerı başlat
         if (CurrentGameState == EPuzzleGameState::NotStarted)
         {
             StartGame();
@@ -275,7 +268,7 @@ bool APuzzleGameMode::CheckGameCompletion()
     if (PuzzlePieces.Num() == 0)
         return false;
     
-    // Check if all pieces are spawned and in correct positions
+    // Dogru pozisyon kontrolü
     int32 SpawnedPieces = 0;
     int32 CorrectPieces = 0;
     
@@ -291,7 +284,7 @@ bool APuzzleGameMode::CheckGameCompletion()
         }
     }
     
-    // Game is complete when all pieces are spawned and in correct positions
+    // Doğru pozisyonlardaysa oyunu bitir
     if (SpawnedPieces == PuzzlePieces.Num() && CorrectPieces == PuzzlePieces.Num())
     {
         return true;
@@ -300,41 +293,8 @@ bool APuzzleGameMode::CheckGameCompletion()
     return false;
 }
 
-void APuzzleGameMode::ShufflePuzzlePieces()
-{
-    // Since pieces are spawned from UI, we don't shuffle existing pieces
-    // This function is kept for compatibility but does nothing in the new system
-    
-    // Comment out the shuffling logic as it's not compatible with UI-based spawning
-    /*
-    // Array'i karıştır (Fisher-Yates shuffle algoritması)
-    for (int32 i = PuzzlePieces.Num() - 1; i > 0; i--)
-    {
-        int32 RandomIndex = UKismetMathLibrary::RandomIntegerInRange(0, i);
-        PuzzlePieces.Swap(i, RandomIndex);
-    }
 
-    // Karıştırıldıktan sonra pozisyonları güncelle
-    for (int32 i = 0; i < PuzzlePieces.Num(); i++)
-    {
-        if (IsValid(PuzzlePieces[i]))
-        {
-            // Yeni pozisyonu hesapla (grid layout)
-            int32 Row = i / PuzzleWidth;
-            int32 Col = i % PuzzleWidth;
-
-            FVector NewPosition = PuzzleStartLocation + FVector(
-                Col * PieceSpacing,
-                Row * PieceSpacing,
-                0.0f
-            );
-
-            PuzzlePieces[i]->MovePieceToLocation(NewPosition, false);
-        }
-    }
-    */
-}
-
+//Dogru konulan parça sayısı
 int32 APuzzleGameMode::GetCompletedPiecesCount() const
 {
     int32 Count = 0;
@@ -348,6 +308,8 @@ int32 APuzzleGameMode::GetCompletedPiecesCount() const
     return Count;
 }
 
+
+// İlerleme yüzdesi
 float APuzzleGameMode::GetCompletionPercentage() const
 {
     if (PuzzlePieces.Num() == 0)
@@ -356,6 +318,8 @@ float APuzzleGameMode::GetCompletionPercentage() const
     return (float)GetCompletedPiecesCount() / (float)PuzzlePieces.Num() * 100.0f;
 }
 
+
+//Oyun bitiminde sayacı durdur
 void APuzzleGameMode::OnGameComplete()
 {
     CurrentGameState = EPuzzleGameState::Completed;
@@ -366,6 +330,8 @@ void APuzzleGameMode::OnGameComplete()
 
 }
 
+
+//Timer 
 void APuzzleGameMode::OnTimerTick()
 {
     if (CurrentGameState == EPuzzleGameState::InProgress)
@@ -375,12 +341,14 @@ void APuzzleGameMode::OnTimerTick()
     }
 }
 
+
+//Puzzle ı başlat
 void APuzzleGameMode::InitializePuzzle()
 {
     CurrentGameState = EPuzzleGameState::NotStarted;
 
     
-    // Clear any existing pieces first
+    // Önceki parçaları sil
     for (int32 i = 0; i < PuzzlePieces.Num(); i++)
     {
         if (PuzzlePieces[i])
@@ -390,43 +358,41 @@ void APuzzleGameMode::InitializePuzzle()
         }
     }
 
-    // Calculate boundary first
+    // Boundary oluştur
     CalculateBoundary();
 
-    // Create grid visualization
+    // Debug
     if (bShowGridMarkers)
     {
         CreateGridVisualization();
     }
 
-    // Initialize the puzzle pieces array but don't spawn them
-    // They will be spawned when dragged from UI
+    // Puzzle parçalarıını oluştur
+    // UI tarafından oluşturulacak
     int32 TotalPieces = PuzzleWidth * PuzzleHeight;
     PuzzlePieces.Empty();
     PuzzlePieces.SetNum(TotalPieces);
     
-    // Initialize grid occupancy array
     GridOccupancy.Empty();
     GridOccupancy.SetNum(TotalPieces);
     for (int32 i = 0; i < TotalPieces; i++)
     {
-        GridOccupancy[i] = -1; // -1 means empty
+        GridOccupancy[i] = -1;
     }
     
-    // Ensure all entries are null initially
     for (int32 i = 0; i < TotalPieces; i++)
     {
         PuzzlePieces[i] = nullptr;
     }
     
-    // Create a shuffled list of piece IDs for the UI
+    // Parçaç ID leri karıştır 
     AvailablePieceIDs.Empty();
     for (int32 i = 0; i < TotalPieces; i++)
     {
         AvailablePieceIDs.Add(i);
     }
     
-    // Check for duplicates before shuffling
+    // Duplike için kontrol et
     TSet<int32> UniqueCheck;
     for (int32 ID : AvailablePieceIDs)
     {
@@ -437,14 +403,13 @@ void APuzzleGameMode::InitializePuzzle()
         }
     }
     
-    // Shuffle the available pieces for random order
     for (int32 i = AvailablePieceIDs.Num() - 1; i > 0; i--)
     {
         int32 j = FMath::RandRange(0, i);
         AvailablePieceIDs.Swap(i, j);
     }
     
-    // Debug: Log initial available pieces
+    // Debug: Log 
     FString InitialPieces = TEXT("Initial available pieces: ");
     for (int32 ID : AvailablePieceIDs)
     {
@@ -456,69 +421,65 @@ void APuzzleGameMode::InitializePuzzle()
 void APuzzleGameMode::CreateGridVisualization()
 {
 
-    // Clear existing markers
     ClearGridVisualization();
 
-    // Create grid markers for each correct position
     int32 TotalPieces = PuzzleWidth * PuzzleHeight;
 
     for (int32 i = 0; i < TotalPieces; i++)
     {
-        // Calculate grid position
         int32 Row = i / PuzzleWidth;
         int32 Col = i % PuzzleWidth;
 
         FVector GridPosition = PuzzleStartLocation + FVector(
             Col * PieceSpacing,
             Row * PieceSpacing,
-            -10.0f // Slightly below ground
+            -10.0f 
         );
 
         CreateGridMarker(GridPosition, i);
 
-        // Debug sphere for visualization
 #if WITH_EDITOR
 #endif
     }
 
 }
 
+// Gridleri görselleştirmek için oluşturulan fonksiyon 
 void APuzzleGameMode::CreateGridMarker(const FVector& Position, int32 GridIndex)
 {
-    // Spawn static mesh actor for grid marker
+    
     AStaticMeshActor* GridMarker = GetWorld()->SpawnActor<AStaticMeshActor>();
 
     if (GridMarker)
     {
-        // Get mesh component
+        
         UStaticMeshComponent* MeshComp = GridMarker->GetStaticMeshComponent();
 
         if (MeshComp && GridMarkerMesh)
         {
-            // Set the pre-loaded cube mesh
+            
             MeshComp->SetStaticMesh(GridMarkerMesh);
 
-            // Set position and scale
+           
             GridMarker->SetActorLocation(Position);
             GridMarker->SetActorScale3D(FVector(GridMarkerScale, GridMarkerScale, 0.02f)); // Flat marker
 
-            // Create dynamic material for grid marker
+            
             UMaterialInterface* DefaultMaterial = MeshComp->GetMaterial(0);
             if (DefaultMaterial)
             {
                 UMaterialInstanceDynamic* DynamicMat = UMaterialInstanceDynamic::Create(DefaultMaterial, this);
                 if (DynamicMat)
                 {
-                    // Set grid marker color from property
+                    
                     DynamicMat->SetVectorParameterValue(TEXT("BaseColor"), GridMarkerColor);
                     MeshComp->SetMaterial(0, DynamicMat);
                 }
             }
 
-            // Set collision to no collision (visual only)
+           
             MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-            // Set render settings
             MeshComp->SetCastShadow(false);
             MeshComp->SetReceivesDecals(false);
 
@@ -556,9 +517,11 @@ void APuzzleGameMode::ToggleGridVisualization()
     }
 }
 
+
+// Boundry box alanı hesaplama
 void APuzzleGameMode::CalculateBoundary()
 {
-    // Calculate the bounding box for the puzzle grid
+   
     FVector MinCorner = PuzzleStartLocation;
     FVector MaxCorner = PuzzleStartLocation + FVector(
         (PuzzleWidth - 1) * PieceSpacing,
@@ -566,12 +529,9 @@ void APuzzleGameMode::CalculateBoundary()
         0.0f
     );
 
-    // Add padding to boundary
     BoundaryMin = MinCorner - FVector(BoundaryPadding, BoundaryPadding, 0.0f);
     BoundaryMax = MaxCorner + FVector(BoundaryPadding, BoundaryPadding, 0.0f);
 
-
-    // Debug draw boundary box
     DrawBoundaryDebug();
 }
 
@@ -585,13 +545,11 @@ FVector APuzzleGameMode::ClampLocationToBoundary(const FVector& Location)
 {
     FVector ClampedLocation = Location;
 
-    // Clamp X coordinate
     ClampedLocation.X = FMath::Clamp(ClampedLocation.X, BoundaryMin.X, BoundaryMax.X);
 
-    // Clamp Y coordinate
     ClampedLocation.Y = FMath::Clamp(ClampedLocation.Y, BoundaryMin.Y, BoundaryMax.Y);
 
-    // Keep Z at ground level
+    // Z değeri değişmeyecek
     ClampedLocation.Z = 0.0f;
 
     return ClampedLocation;
@@ -627,18 +585,13 @@ void APuzzleGameMode::EnforceAllPieceBoundaries()
 void APuzzleGameMode::DrawBoundaryDebug()
 {
 #if WITH_EDITOR
-    // Draw boundary box outline
     FVector BoxCenter = (BoundaryMin + BoundaryMax) * 0.5f;
     FVector BoxExtent = (BoundaryMax - BoundaryMin) * 0.5f;
 
 #endif
 }
 
-// Add to GameMode for testing
-void APuzzleGameMode::DebugGridSystem()
-{
 
-}
 
 void APuzzleGameMode::RefreshGridVisualization()
 {
@@ -681,7 +634,6 @@ void APuzzleGameMode::PrintAllPiecePositions()
                 CorrectPieces++;
             }
             
-            // Find which grid this piece is on
             int32 CurrentGridID = GetGridIDFromPosition(Location);
             
         }
@@ -690,9 +642,7 @@ void APuzzleGameMode::PrintAllPiecePositions()
         }
     }
     
-    
-    // Check completion
-    bool bShouldBeComplete = SpawnedPieces == TotalPieces && CorrectPieces == TotalPieces;
+        bool bShouldBeComplete = SpawnedPieces == TotalPieces && CorrectPieces == TotalPieces;
     
     if (bShouldBeComplete && CurrentGameState != EPuzzleGameState::Completed)
     {
@@ -708,7 +658,6 @@ FVector APuzzleGameMode::GetNearestGridPosition(const FVector& WorldPosition)
     FVector NearestPosition = WorldPosition;
     float MinDistance = FLT_MAX;
     
-    // Check all grid positions
     for (int32 Row = 0; Row < PuzzleHeight; Row++)
     {
         for (int32 Col = 0; Col < PuzzleWidth; Col++)
@@ -728,7 +677,6 @@ FVector APuzzleGameMode::GetNearestGridPosition(const FVector& WorldPosition)
         }
     }
     
-    // Keep the Z coordinate at ground level
     NearestPosition.Z = 0.0f;
     
     
@@ -737,13 +685,11 @@ FVector APuzzleGameMode::GetNearestGridPosition(const FVector& WorldPosition)
 
 APuzzlePiece* APuzzleGameMode::GetPieceAtGridPosition(const FVector& GridPosition)
 {
-    // Check all pieces to find one at the given grid position
     for (APuzzlePiece* Piece : PuzzlePieces)
     {
         if (Piece)
         {
             FVector PieceLocation = Piece->GetActorLocation();
-            // Check if piece is at this grid position (within a small tolerance)
             if (FVector::Dist2D(PieceLocation, GridPosition) < 10.0f)
             {
                 return Piece;
@@ -758,7 +704,6 @@ void APuzzleGameMode::RemovePieceFromAvailable(int32 PieceID)
 {
     int32 RemovedCount = AvailablePieceIDs.Remove(PieceID);
     
-    // Debug: Print all remaining available pieces
     if (AvailablePieceIDs.Num() <= 3)
     {
         FString RemainingPieces = TEXT("Remaining available pieces: ");
@@ -771,22 +716,18 @@ void APuzzleGameMode::RemovePieceFromAvailable(int32 PieceID)
 
 int32 APuzzleGameMode::GetGridIDFromPosition(const FVector& WorldPosition)
 {
-    // Find the nearest grid position first
     FVector NearestGridPos = GetNearestGridPosition(WorldPosition);
     
-    // Calculate which grid cell this corresponds to
     FVector RelativePos = NearestGridPos - PuzzleStartLocation;
     
     int32 Col = FMath::RoundToInt(RelativePos.X / PieceSpacing);
     int32 Row = FMath::RoundToInt(RelativePos.Y / PieceSpacing);
     
-    // Validate bounds
     if (Col < 0 || Col >= PuzzleWidth || Row < 0 || Row >= PuzzleHeight)
     {
-        return -1; // Invalid grid position
+        return -1; 
     }
     
-    // Convert to grid ID (row * width + col)
     int32 GridID = Row * PuzzleWidth + Col;
     
     
@@ -800,11 +741,9 @@ FVector APuzzleGameMode::GetGridPositionFromID(int32 GridID)
         return FVector::ZeroVector;
     }
     
-    // Calculate row and column from ID
     int32 Row = GridID / PuzzleWidth;
     int32 Col = GridID % PuzzleWidth;
     
-    // Calculate world position
     FVector GridPosition = PuzzleStartLocation + FVector(
         Col * PieceSpacing,
         Row * PieceSpacing,
@@ -821,7 +760,6 @@ APuzzlePiece* APuzzleGameMode::GetPieceAtGridID(int32 GridID)
         return nullptr;
     }
     
-    // Check the grid occupancy array
     if (GridOccupancy.IsValidIndex(GridID))
     {
         int32 PieceID = GridOccupancy[GridID];
@@ -845,7 +783,6 @@ void APuzzleGameMode::UpdateGridOccupancy(int32 GridID, APuzzlePiece* Piece)
     {
         int32 PieceID = Piece->GetPieceID();
         
-        // First remove this piece from any other grid position
         for (int32 i = 0; i < GridOccupancy.Num(); i++)
         {
             if (GridOccupancy[i] == PieceID && i != GridID)
@@ -854,12 +791,10 @@ void APuzzleGameMode::UpdateGridOccupancy(int32 GridID, APuzzlePiece* Piece)
             }
         }
         
-        // Now update at new position
         GridOccupancy[GridID] = PieceID;
     }
     else
     {
-        // Clear the grid position
         GridOccupancy[GridID] = -1;
     }
 }
@@ -871,56 +806,44 @@ void APuzzleGameMode::SwapPiecesAtGridIDs(int32 GridID1, int32 GridID2)
         return;
     }
     
-    // Get pieces at both grid positions
     APuzzlePiece* Piece1 = GetPieceAtGridID(GridID1);
     APuzzlePiece* Piece2 = GetPieceAtGridID(GridID2);
     
-    // Get the grid positions
     FVector GridPos1 = GetGridPositionFromID(GridID1);
     FVector GridPos2 = GetGridPositionFromID(GridID2);
     
     if (Piece1 && Piece2)
     {
-        // Both positions occupied - swap them
         
-        // Move pieces
         Piece1->MovePieceToLocation(GridPos2, false);
         Piece2->MovePieceToLocation(GridPos1, false);
         
-        // Update occupancy
         GridOccupancy[GridID1] = Piece2->GetPieceID();
         GridOccupancy[GridID2] = Piece1->GetPieceID();
     }
     else if (Piece1 && !Piece2)
     {
-        // Only position 1 occupied - move piece1 to position 2
         
         Piece1->MovePieceToLocation(GridPos2, false);
         
-        // Update occupancy
         GridOccupancy[GridID1] = -1;
         GridOccupancy[GridID2] = Piece1->GetPieceID();
     }
     else if (!Piece1 && Piece2)
     {
-        // Only position 2 occupied - move piece2 to position 1
         
         Piece2->MovePieceToLocation(GridPos1, false);
         
-        // Update occupancy
         GridOccupancy[GridID2] = -1;
         GridOccupancy[GridID1] = Piece2->GetPieceID();
     }
-    // If neither position has a piece, nothing to do
 }
 
 void APuzzleGameMode::ForceCheckGameCompletion()
 {
     
-    // First print all positions
     PrintAllPiecePositions();
     
-    // Force check
     if (CheckGameCompletion())
     {
         OnGameComplete();
@@ -948,9 +871,7 @@ void APuzzleGameMode::DebugPuzzleState()
     }
     
     
-    // Also show on screen
     
-    // Check which piece is at wrong position
     for (int32 i = 0; i < PuzzlePieces.Num(); i++)
     {
         if (PuzzlePieces[i] && !PuzzlePieces[i]->IsInCorrectPosition())
@@ -962,7 +883,6 @@ void APuzzleGameMode::DebugPuzzleState()
         }
     }
     
-    // Check if any grid position is empty
     for (int32 i = 0; i < GridOccupancy.Num(); i++)
     {
         if (GridOccupancy[i] < 0)
@@ -971,13 +891,11 @@ void APuzzleGameMode::DebugPuzzleState()
         }
     }
     
-    // Special check for Piece 8
     if (PuzzlePieces.IsValidIndex(8) && PuzzlePieces[8])
     {
         FVector Piece8Pos = PuzzlePieces[8]->GetActorLocation();
         int32 Piece8GridID = GetGridIDFromPosition(Piece8Pos);
         
-        // Check if it's registered in grid occupancy
         bool bFoundInOccupancy = false;
         for (int32 i = 0; i < GridOccupancy.Num(); i++)
         {

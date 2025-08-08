@@ -151,9 +151,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     bool CheckGameCompletion();
 
-    UFUNCTION(BlueprintCallable, Category = "Puzzle")
-    void ShufflePuzzlePieces();
-
     UFUNCTION(BlueprintPure, Category = "Puzzle")
     TArray<APuzzlePiece*> GetPuzzlePieces() const { return PuzzlePieces; }
 
@@ -236,9 +233,6 @@ public:
     // Debug functions - NEW
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void DrawBoundaryDebug();
-
-    UFUNCTION(BlueprintCallable, Category = "Debug")
-    void DebugGridSystem();
 
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void PrintAllPiecePositions();
